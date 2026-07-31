@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0+13 — Dark lens launcher artwork
+
+- Replaced the launcher with the newly supplied black camera-lens artwork and red recording indicator.
+- Preserved the supplied composition for legacy rounded-square and circular launchers.
+- Generated a safe-zone adaptive version so the red indicator and complete white lens ring survive common Android masks.
+- Camera engine, recorder, processing, smooth zoom and v0.9 functionality are unchanged.
+
 ## 0.10.0+12 — User-supplied launcher artwork
 
 - Replaced the Zircon launcher mark with the user-supplied blue camera artwork.

@@ -4,13 +4,17 @@ Device-specific Flutter cinema-camera application for Xiaomi Redmi Note 13 Pro+ 
 
 ## Current build
 
-- Release archive: `ZirconCinema-0.10.0-EXTRACT-FIRST.zip` (keep release assets outside Git history)
-- Version: `0.10.0+12`
+- Release archive: `ZirconCinema-0.11.0-EXTRACT-FIRST.zip` (keep release assets outside Git history)
+- Version: `0.11.0+13`
 - Package: `ai.arena.zirconcinema.ui`
 - ABI: `arm64-v8a`
-- APK SHA-256: `98635dac0b381dd774237a42e5f075b580ddda00c690d65474b16df4de37d5e9`
+- APK SHA-256: `47f817125ee27035e5d5f4d035d8b6e7221d1a84903d0db73a36e98960cc4bca`
 
 The package and personal-test certificate are unchanged, so this APK can update v0.1/v0.2/v0.3.0. It is release-optimized but signed with an Android debug certificate; replace that certificate before production distribution.
+
+### v0.11 launcher icon milestone
+
+The Android launcher now uses the supplied dark camera-lens artwork with a red recording indicator. The adaptive version is scaled into Android's mask-safe region. Camera behavior remains identical to v0.10.
 
 ### v0.10 launcher icon milestone
 
@@ -154,7 +158,7 @@ Install or update:
 
 ```bash
 # Extract the GitHub Release ZIP first, then:
-adb install -r ZirconCinema-0.10.0-new-icon-arm64.apk
+adb install -r ZirconCinema-0.11.0-dark-lens-icon-arm64.apk
 ```
 
 See the [UI/UX specification](docs/ui_ux_spec.md), [concept mockup](docs/zircon_camera_ui_mockup.png), [third-party research](docs/third_party_research.md), and [changelog](CHANGELOG.md).

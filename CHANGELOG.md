@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0+12 — User-supplied launcher artwork
+
+- Replaced the Zircon launcher mark with the user-supplied blue camera artwork.
+- Cropped away excess canvas and the unrelated lower-left signature area.
+- Generated legacy square and round launcher assets for mdpi through xxxhdpi.
+- Added a white-background adaptive launcher icon with the artwork kept inside Android's safe region.
+- Camera engine, recorder, controls and v0.9 functionality are unchanged.
+
 ## 0.9.0+11 — Recording modes, stabilization and volume zoom
 
 - Added volume-button zoom on the Camera page: tap nudges ¹⁄₁₂ stop; hold drives continuous zoom; release decelerates smoothly.

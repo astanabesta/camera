@@ -16,6 +16,8 @@ void main() {
 
     controller.setNumericControlValue(CameraControl.iso, 3);
     expect(controller.iso, '400');
+    controller.setNumericControlValue(CameraControl.iso, 6);
+    expect(controller.iso, '3200');
     controller.setControlAuto(CameraControl.iso, true);
     expect(controller.iso, 'AUTO');
     controller.setNumericControlValue(CameraControl.shutter, 172.8);
@@ -90,9 +92,17 @@ void main() {
     expect(ZoomSpeed.slow.holdRateStopsPerSecond, .70);
     controller.setZoomSpeed(ZoomSpeed.medium);
     expect(controller.zoomSpeed, ZoomSpeed.medium);
+    expect(ZoomSpeed.medium.multiplier, 2.25);
+    expect(ZoomSpeed.fast.multiplier, 3.5);
     expect(
-      ZoomSpeed.fast.targetRateStopsPerSecond,
-      greaterThan(ZoomSpeed.medium.targetRateStopsPerSecond),
+      ZoomSpeed.medium.targetRateStopsPerSecond /
+          ZoomSpeed.slow.targetRateStopsPerSecond,
+      closeTo(2.25, .0001),
+    );
+    expect(
+      ZoomSpeed.fast.targetRateStopsPerSecond /
+          ZoomSpeed.slow.targetRateStopsPerSecond,
+      closeTo(3.5, .0001),
     );
     controller.dispose();
   });
@@ -134,7 +144,7 @@ void main() {
     expect(find.text('WB'), findsOneWidget);
     await tester.tap(find.text('ISO'));
     await tester.pumpAndSettle();
-    expect(find.text('50–800 • LOG SCALE'), findsOneWidget);
+    expect(find.text('50–3200 • 800 ANALOG MAX'), findsOneWidget);
     expect(find.text('AUTO'), findsWidgets);
     expect(tester.takeException(), isNull);
 
@@ -164,8 +174,8 @@ void main() {
     );
     expect(find.text('Zoom Speed'), findsOneWidget);
     expect(find.text('Slow'), findsOneWidget);
-    expect(find.text('Medium'), findsOneWidget);
-    expect(find.text('Fast'), findsOneWidget);
+    expect(find.text('Medium 2.25×'), findsOneWidget);
+    expect(find.text('Fast 3.5×'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Monitor'));
@@ -216,13 +226,18 @@ void main() {
     expect(find.text('MEDIA'), findsOneWidget);
     expect(find.text('SETTINGS'), findsOneWidget);
     expect(find.byType(RecordButton), findsOneWidget);
+    expect(find.byIcon(Icons.storage_rounded), findsOneWidget);
+    expect(
+      tester.getCenter(find.byIcon(Icons.storage_rounded)).dy,
+      greaterThan(770),
+    );
     expect(tester.takeException(), isNull);
 
     controller.setMasterAuto(false);
     await tester.pumpAndSettle();
     await tester.tap(find.text('ISO'));
     await tester.pumpAndSettle();
-    expect(find.text('50–800 • LOG SCALE'), findsOneWidget);
+    expect(find.text('50–3200 • 800 ANALOG MAX'), findsOneWidget);
     expect(find.text('MANUAL'), findsWidgets);
     expect(tester.takeException(), isNull);
   });

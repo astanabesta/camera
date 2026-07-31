@@ -41,16 +41,18 @@ class VerticalControlPanel extends StatelessWidget {
     CameraControl.iso => _ruler(
       control,
       0,
-      4,
-      48,
+      6,
+      72,
       1 / 12,
-      '50–800 • LOG SCALE',
+      '50–3200 • 800 ANALOG MAX',
       const <_Preset>[
         _Preset(0, '50'),
         _Preset(1, '100'),
         _Preset(2, '200'),
         _Preset(3, '400 HCG*'),
-        _Preset(4, '800'),
+        _Preset(4, '800 A-MAX'),
+        _Preset(5, '1600 DIGITAL'),
+        _Preset(6, '3200 DIGITAL'),
       ],
       (double value) => '${(50 * math.pow(2, value)).round()}',
     ),
@@ -122,7 +124,7 @@ class VerticalControlPanel extends StatelessWidget {
       math.log(controller.maximumZoomRatio) / math.ln2,
       180,
       1 / 60,
-      '${controller.zoomSpeed.label.toUpperCase()} • LOG₂ • ACT ${_zoom(controller.actualZoomRatio ?? 1.0)}',
+      '${controller.zoomSpeed.compactLabel} • LOG₂ • ACT ${_zoom(controller.actualZoomRatio ?? 1.0)}',
       <_Preset>[
         const _Preset(0, '1×'),
         const _Preset(1, '2×'),
@@ -190,7 +192,7 @@ class VerticalControlPanel extends StatelessWidget {
                             (value - preset.value).abs() < step * 1.1;
                         return SizedBox(
                           width: 68,
-                          height: 25,
+                          height: presets.length > 5 ? 20 : 25,
                           child: TextButton(
                             onPressed: () => controller.setNumericControlValue(
                               control,
@@ -448,7 +450,7 @@ class _ZoomSpeedControl extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: _ModeButton(
-                    label: speed.label.toUpperCase(),
+                    label: speed.compactLabel,
                     selected: controller.zoomSpeed == speed,
                     onTap: () => controller.setZoomSpeed(speed),
                   ),
@@ -525,13 +527,16 @@ class _ModeButton extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(3),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? ZirconColors.accent : ZirconColors.textMuted,
-              fontSize: 7,
-              fontWeight: FontWeight.w900,
-              letterSpacing: .5,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? ZirconColors.accent : ZirconColors.textMuted,
+                fontSize: 7,
+                fontWeight: FontWeight.w900,
+                letterSpacing: .35,
+              ),
             ),
           ),
         ),

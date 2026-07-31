@@ -299,7 +299,7 @@ List<Widget> _cameraRows(CameraUiController c) => <Widget>[
     title: 'Zoom Speed',
     value: c.zoomSpeed,
     values: ZoomSpeed.values,
-    label: (ZoomSpeed value) => value.label,
+    label: (ZoomSpeed value) => value.settingsLabel,
     onChanged: c.setZoomSpeed,
   ),
   _ValueRow(

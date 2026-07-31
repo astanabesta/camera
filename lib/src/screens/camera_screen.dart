@@ -407,16 +407,11 @@ class _PortraitCamera extends StatelessWidget {
           right: 0,
           child: _PortraitTop(controller: controller),
         ),
-        Positioned(
-          top: 122,
-          left: 8,
-          child: _TelemetryBadge(controller: controller),
-        ),
         if (controller.activeControl != null)
           Positioned(
             top: 116,
             right: 0,
-            bottom: 112,
+            bottom: 132,
             child: VerticalControlPanel(controller: controller),
           ),
         if (controller.activeControl == null)
@@ -782,46 +777,56 @@ class _PortraitBottom extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        height: 112,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        height: 132,
+        padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
         decoration: const BoxDecoration(
           color: Color(0xEE080C11),
           border: Border(top: BorderSide(color: ZirconColors.stroke)),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        child: Column(
           children: <Widget>[
-            _PortraitNav(
-              icon: Icons.video_library_outlined,
-              label: 'MEDIA',
-              onTap: () => controller.setSection(AppSection.media),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _TelemetryBadge(controller: controller),
             ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                RecordButton(
-                  recording: controller.recording,
-                  busy: controller.recordBusy,
-                  enabled: controller.canRecord,
-                  onTap: controller.toggleRecording,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  controller.recording ? 'STOP' : 'REC',
-                  style: TextStyle(
-                    color: controller.recording
-                        ? ZirconColors.record
-                        : ZirconColors.text,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: <Widget>[
+                  _PortraitNav(
+                    icon: Icons.video_library_outlined,
+                    label: 'MEDIA',
+                    onTap: () => controller.setSection(AppSection.media),
                   ),
-                ),
-              ],
-            ),
-            _PortraitNav(
-              icon: Icons.tune_rounded,
-              label: 'SETTINGS',
-              onTap: () => controller.setSection(AppSection.settings),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      RecordButton(
+                        recording: controller.recording,
+                        busy: controller.recordBusy,
+                        enabled: controller.canRecord,
+                        onTap: controller.toggleRecording,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        controller.recording ? 'STOP' : 'REC',
+                        style: TextStyle(
+                          color: controller.recording
+                              ? ZirconColors.record
+                              : ZirconColors.text,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  _PortraitNav(
+                    icon: Icons.tune_rounded,
+                    label: 'SETTINGS',
+                    onTap: () => controller.setSection(AppSection.settings),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

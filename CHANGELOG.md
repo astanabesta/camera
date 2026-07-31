@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0+16 — Lower-latency zoom pacing, ISO 3200 and portrait HUD fix
+
+- Moved smooth-zoom advancement from delayed `onCaptureCompleted` metadata to the lower-latency `onCaptureStarted` callback using actual sensor timestamps and frame numbers.
+- Added one-update-per-frame guarding and duplicate-ratio suppression to reduce Camera2 repeating-request churn and perceived zoom stutter.
+- Slow remains the exact original speed; Medium is now 2.25× and Fast is 3.5× Slow for target, volume-hold and acceleration tuning.
+- Moved portrait storage/battery telemetry from the top parameter strip into the bottom status/record panel, eliminating the Lens HUD overlap.
+- Extended manual ISO from 50–800 to 50–3200. ISO 50–800 is labeled analog range; ISO 1600/3200 is labeled digital/post-analog gain.
+- Preserved capture-timestamp log₂ interpolation, pinch/ruler/preset/volume controls and smooth braking in every speed mode.
+
 ## 0.13.0+15 — Adjustable smooth zoom speed
 
 - Added Slow, Medium and Fast zoom-speed presets in Camera Settings and the active zoom panel.

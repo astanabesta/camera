@@ -147,6 +147,8 @@ public final class CameraEngine implements SensorEventListener {
     private float actualZoomRatio = 1.0f;
     private boolean zoomControllerActive;
     private long lastZoomSensorTimestampNs;
+    private long lastZoomUpdateFrameNumber = -1L;
+    private float lastSubmittedZoomRatio = Float.NaN;
     private long lastSensorTimestampNs;
     private double captureIntervalEmaNs;
     private long lastCaptureFrameNumber = -1L;
@@ -830,13 +832,24 @@ public final class CameraEngine implements SensorEventListener {
     private final CameraCaptureSession.CaptureCallback captureCallback =
             new CameraCaptureSession.CaptureCallback() {
                 @Override
+                public void onCaptureStarted(CameraCaptureSession session,
+                                             CaptureRequest request,
+                                             long timestamp,
+                                             long frameNumber) {
+                    // Capture-start callbacks arrive earlier and with less
+                    // variable ISP/result latency than onCaptureCompleted.
+                    // Advancing here keeps request submission aligned to the
+                    // actual sensor cadence instead of delayed metadata timing.
+                    updateCaptureCadence(timestamp, frameNumber);
+                    updateZoomController(timestamp, frameNumber);
+                }
+
+                @Override
                 public void onCaptureCompleted(CameraCaptureSession session,
                                                CaptureRequest request,
                                                TotalCaptureResult result) {
                     captureResultCounter++;
                     Long sensorTimestamp = result.get(CaptureResult.SENSOR_TIMESTAMP);
-                    updateCaptureCadence(sensorTimestamp, result.getFrameNumber());
-                    updateZoomController(sensorTimestamp);
                     Float returnedZoom = result.get(CaptureResult.CONTROL_ZOOM_RATIO);
                     if (returnedZoom != null && returnedZoom > 0.0f) {
                         actualZoomRatio = returnedZoom;
@@ -964,12 +977,12 @@ public final class CameraEngine implements SensorEventListener {
         lastCaptureFrameNumber = frameNumber;
     }
 
-    private void updateZoomController(Long sensorTimestampNs) {
-        if (!zoomControllerActive || sensorTimestampNs == null || sensorTimestampNs <= 0L ||
+    private void updateZoomController(long sensorTimestampNs, long frameNumber) {
+        if (frameNumber == lastZoomUpdateFrameNumber) return;
+        lastZoomUpdateFrameNumber = frameNumber;
+        if (!zoomControllerActive || sensorTimestampNs <= 0L ||
                 repeatingBuilder == null || captureSession == null) {
-            if (sensorTimestampNs != null && sensorTimestampNs > 0L) {
-                lastZoomSensorTimestampNs = sensorTimestampNs;
-            }
+            if (sensorTimestampNs > 0L) lastZoomSensorTimestampNs = sensorTimestampNs;
             return;
         }
         if (lastZoomSensorTimestampNs <= 0L || sensorTimestampNs <= lastZoomSensorTimestampNs) {
@@ -1046,11 +1059,14 @@ public final class CameraEngine implements SensorEventListener {
 
     private void submitZoomRequest() {
         if (repeatingBuilder == null || captureSession == null) return;
+        float ratio = zoomRatioFromLog(zoomLog2);
+        if (Float.isFinite(lastSubmittedZoomRatio) &&
+                Math.abs(ratio - lastSubmittedZoomRatio) < 0.00002f) return;
         try {
-            setSafely(repeatingBuilder, CaptureRequest.CONTROL_ZOOM_RATIO,
-                    zoomRatioFromLog(zoomLog2));
+            setSafely(repeatingBuilder, CaptureRequest.CONTROL_ZOOM_RATIO, ratio);
             captureSession.setRepeatingRequest(
                     repeatingBuilder.build(), captureCallback, cameraHandler);
+            lastSubmittedZoomRatio = ratio;
         } catch (Throwable error) {
             zoomControllerActive = false;
             zoomVelocityStopsPerSecond = 0.0;
@@ -1272,6 +1288,8 @@ public final class CameraEngine implements SensorEventListener {
         }
         repeatingBuilder = null;
         lastZoomSensorTimestampNs = 0L;
+        lastZoomUpdateFrameNumber = -1L;
+        lastSubmittedZoomRatio = Float.NaN;
     }
 
     private void closeCameraOnly() {

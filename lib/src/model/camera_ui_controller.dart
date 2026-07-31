@@ -74,20 +74,30 @@ enum StabilizationMode {
 
 enum ZoomSpeed {
   // Slow intentionally preserves the exact v0.9-v0.12 tuning.
-  slow('Slow', 1.35, 0.70, 4.0),
-  medium('Medium', 2.10, 1.15, 6.5),
-  fast('Fast', 3.20, 1.80, 10.0);
+  slow('Slow', 1.0, 1.35, 0.70, 4.0),
+  medium('Medium', 2.25, 3.0375, 1.575, 9.0),
+  fast('Fast', 3.5, 4.725, 2.45, 14.0);
 
   const ZoomSpeed(
     this.label,
+    this.multiplier,
     this.targetRateStopsPerSecond,
     this.holdRateStopsPerSecond,
     this.accelerationStopsPerSecondSquared,
   );
   final String label;
+  final double multiplier;
   final double targetRateStopsPerSecond;
   final double holdRateStopsPerSecond;
   final double accelerationStopsPerSecondSquared;
+
+  String get settingsLabel =>
+      this == ZoomSpeed.slow ? label : '$label ${multiplier}×';
+  String get compactLabel => switch (this) {
+    ZoomSpeed.slow => 'SLOW',
+    ZoomSpeed.medium => 'MED 2.25×',
+    ZoomSpeed.fast => 'FAST 3.5×',
+  };
 }
 
 enum FocusUiState { hidden, scanning, focused, failed, locked }
@@ -666,7 +676,7 @@ class CameraUiController extends ChangeNotifier {
     if (controlsLocked || !isControlAvailable(control)) return;
     switch (control) {
       case CameraControl.iso:
-        _manualIso = (50.0 * mathPow2(value)).round().clamp(50, 800).toInt();
+        _manualIso = (50.0 * mathPow2(value)).round().clamp(50, 3200).toInt();
         iso = '$_manualIso';
         break;
       case CameraControl.shutter:
@@ -1187,7 +1197,16 @@ const Map<CameraControl, List<String>> cameraControlOptions =
       CameraControl.lens: <String>['MAIN'],
       CameraControl.fps: <String>['24', '25', '30'],
       CameraControl.shutter: <String>['90°', '144°', '172.8°', '180°', '216°'],
-      CameraControl.iso: <String>['AUTO', '50', '100', '200', '400', '800'],
+      CameraControl.iso: <String>[
+        'AUTO',
+        '50',
+        '100',
+        '200',
+        '400',
+        '800',
+        '1600',
+        '3200',
+      ],
       CameraControl.whiteBalance: <String>[
         'AUTO',
         '3200K',

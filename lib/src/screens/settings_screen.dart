@@ -208,7 +208,7 @@ class _PageBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<Widget> rows = switch (controller.settingsPage) {
-      SettingsPage.record => _recordRows,
+      SettingsPage.record => _recordRows(controller),
       SettingsPage.camera => _cameraRows(controller),
       SettingsPage.processing => _processingRows(controller),
       SettingsPage.audio => _audioRows(controller),
@@ -239,15 +239,33 @@ class _PageBody extends StatelessWidget {
   }
 }
 
-const List<Widget> _recordRows = <Widget>[
-  _ValueRow(title: 'Codec', value: 'HEVC (H.265)'),
-  _ValueRow(title: 'Resolution', value: '4K'),
-  _ValueRow(title: 'Color Space', value: 'Rec.709'),
-  _ValueRow(title: 'Timecode Display', value: 'Record Run'),
-  _SwitchRow(title: 'Timelapse Recording', value: false, enabled: false),
-  _ValueRow(title: 'Capture 1 Frame Every', value: '1 Minute', enabled: false),
-  _SwitchRow(title: 'Continuous Recording', value: false, enabled: false),
-  _ValueRow(title: 'If Media Drops Frame', value: 'Alert'),
+List<Widget> _recordRows(CameraUiController c) => <Widget>[
+  const _ValueRow(title: 'Codec', value: 'HEVC (H.265)'),
+  _ChoiceRow<RecordingMode>(
+    title: 'Resolution',
+    value: c.recordingMode,
+    values: RecordingMode.values,
+    label: (RecordingMode value) => value.label,
+    onChanged: c.setRecordingMode,
+  ),
+  _ValueRow(
+    title: 'Frame Rate',
+    value: '${c.recordingMode.fps} fps',
+    chevron: false,
+  ),
+  _ChoiceRow<BitratePreset>(
+    title: 'Bitrate Request',
+    value: c.bitratePreset,
+    values: BitratePreset.values,
+    label: (BitratePreset value) => '${value.label} ${value.display}',
+    onChanged: c.setBitratePreset,
+  ),
+  const _ValueRow(title: 'Color Space', value: 'Rec.709'),
+  const _ValueRow(title: 'Timecode Display', value: 'Record Run'),
+  const _NoticeRow(
+    text:
+        'Public direct modes: UHD30, FHD30 and 4:3 1440p30. 1080p60 and 4080×3060 encoded open-gate are not advertised by the public direct Camera2/encoder path.',
+  ),
 ];
 
 List<Widget> _cameraRows(CameraUiController c) => <Widget>[
@@ -265,7 +283,18 @@ List<Widget> _cameraRows(CameraUiController c) => <Widget>[
   ),
   const _SwitchRow(title: 'Tap to Focus', value: true),
   const _SwitchRow(title: 'Tap Exposure Metering', value: true),
-  const _ValueRow(title: 'Stabilization', value: 'Optical'),
+  _ChoiceRow<StabilizationMode>(
+    title: 'Stabilization',
+    value: c.stabilizationMode,
+    values: StabilizationMode.values,
+    label: (StabilizationMode value) => value.label,
+    onChanged: c.setStabilizationMode,
+  ),
+  _ValueRow(
+    title: 'Stabilization Result',
+    value: c.actualStabilizationLabel,
+    chevron: false,
+  ),
   const _ValueRow(title: 'Main Camera', value: '6.14 mm  f/1.65'),
 ];
 
@@ -403,6 +432,8 @@ const List<Widget> _functionRows = <Widget>[
   _ValueRow(title: 'Side Tool 1', value: 'Orientation'),
   _ValueRow(title: 'Side Tool 2', value: 'Monitor Tools'),
   _ValueRow(title: 'Long Press Preview', value: 'AE/AF Lock'),
+  _ValueRow(title: 'Volume Up', value: 'Tap step / Hold zoom in'),
+  _ValueRow(title: 'Volume Down', value: 'Tap step / Hold zoom out'),
 ];
 
 const List<Widget> _lutRows = <Widget>[

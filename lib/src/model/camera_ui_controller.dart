@@ -31,6 +31,47 @@ enum NoiseReductionMode {
   final int camera2Value;
 }
 
+enum RecordingMode {
+  uhd30('4K', 3840, 2160, 30, 'UHD'),
+  fhd30('1080p', 1920, 1080, 30, 'FHD'),
+  fourThree30('4:3 1440p', 1920, 1440, 30, '4:3 1440p');
+
+  const RecordingMode(
+    this.label,
+    this.width,
+    this.height,
+    this.fps,
+    this.hudLabel,
+  );
+  final String label;
+  final int width;
+  final int height;
+  final int fps;
+  final String hudLabel;
+}
+
+enum BitratePreset {
+  low('Low', 20000000),
+  medium('Medium', 50000000),
+  high('High', 80000000),
+  max('Max', 100000000);
+
+  const BitratePreset(this.label, this.bitsPerSecond);
+  final String label;
+  final int bitsPerSecond;
+  String get display => '${bitsPerSecond ~/ 1000000} Mb/s';
+}
+
+enum StabilizationMode {
+  off('Off', 0),
+  optical('Optical', 1),
+  electronic('Electronic', 2);
+
+  const StabilizationMode(this.label, this.nativeValue);
+  final String label;
+  final int nativeValue;
+}
+
 enum FocusUiState { hidden, scanning, focused, failed, locked }
 
 enum CameraControl {
@@ -149,8 +190,14 @@ class CameraUiController extends ChangeNotifier {
   double? _audioLevelDbfs;
   SharpnessMode _sharpnessMode = SharpnessMode.off;
   NoiseReductionMode _noiseReductionMode = NoiseReductionMode.minimal;
+  RecordingMode _recordingMode = RecordingMode.uhd30;
+  BitratePreset _bitratePreset = BitratePreset.high;
+  StabilizationMode _stabilizationMode = StabilizationMode.optical;
   int? _actualEdgeMode;
   int? _actualNoiseReductionMode;
+  int? _actualOisMode;
+  int? _actualVideoStabilizationMode;
+  int _previewRotationDegrees = 0;
 
   String lens = 'MAIN';
   String fps = '30';
@@ -192,8 +239,7 @@ class CameraUiController extends ChangeNotifier {
   int? get textureId => _cameraInitialization?.textureId;
   int get previewWidth => _cameraInitialization?.previewWidth ?? 1920;
   int get previewHeight => _cameraInitialization?.previewHeight ?? 1080;
-  int get previewQuarterTurns =>
-      ((_cameraInitialization?.rotationDegrees ?? 0) ~/ 90) % 4;
+  int get previewQuarterTurns => (_previewRotationDegrees ~/ 90) % 4;
   String? get cameraError => _cameraError;
   String? get lastClipUri => _lastClipUri;
   int? get actualIso => _actualIso;
@@ -227,8 +273,13 @@ class CameraUiController extends ChangeNotifier {
   double? get audioLevelDbfs => _audioLevelDbfs;
   SharpnessMode get sharpnessMode => _sharpnessMode;
   NoiseReductionMode get noiseReductionMode => _noiseReductionMode;
+  RecordingMode get recordingMode => _recordingMode;
+  BitratePreset get bitratePreset => _bitratePreset;
+  StabilizationMode get stabilizationMode => _stabilizationMode;
   int? get actualEdgeMode => _actualEdgeMode;
   int? get actualNoiseReductionMode => _actualNoiseReductionMode;
+  int? get actualOisMode => _actualOisMode;
+  int? get actualVideoStabilizationMode => _actualVideoStabilizationMode;
   String get storageAvailableLabel =>
       _formatBytes(_storageAvailableBytes, fallback: '—');
   String get storageTotalLabel =>
@@ -259,6 +310,15 @@ class CameraUiController extends ChangeNotifier {
           4 => 'Zero Shutter Lag',
           _ => 'Mode $_actualNoiseReductionMode',
         };
+  String get actualStabilizationLabel {
+    if (_actualVideoStabilizationMode == 1) return 'Electronic • result';
+    if (_actualOisMode == 1) return 'Optical • result';
+    if (_actualVideoStabilizationMode == 0 && _actualOisMode == 0) {
+      return 'Off • result';
+    }
+    return 'Waiting for Camera2 result';
+  }
+
   CameraOperationMode get operationMode {
     final bool exposureAuto = iso == 'AUTO';
     final bool focusAuto = focus == 'AUTO';
@@ -277,8 +337,8 @@ class CameraUiController extends ChangeNotifier {
   int get nominalFps => int.tryParse(fps) ?? 30;
 
   String get timecode {
-    final int totalFrames = (_recorded.inMicroseconds * nominalFps / 1000000)
-        .floor();
+    final int totalFrames =
+        (_recorded.inMicroseconds * nominalFps / 1000000).floor();
     final int frames = totalFrames % nominalFps;
     final int totalSeconds = totalFrames ~/ nominalFps;
     final int seconds = totalSeconds % 60;
@@ -288,15 +348,15 @@ class CameraUiController extends ChangeNotifier {
   }
 
   String get runtimeLabel => switch (_runtimeState) {
-    CameraRuntimeState.idle => 'CAMERA IDLE',
-    CameraRuntimeState.requestingPermissions => 'ALLOW CAMERA + MIC',
-    CameraRuntimeState.opening => 'OPENING CAMERA 0',
-    CameraRuntimeState.ready => 'CAMERA2 READY',
-    CameraRuntimeState.preparingRecording => 'PREPARING UHD',
-    CameraRuntimeState.recording => 'RECORDING UHD30',
-    CameraRuntimeState.paused => 'CAMERA PAUSED',
-    CameraRuntimeState.error => 'CAMERA ERROR',
-  };
+        CameraRuntimeState.idle => 'CAMERA IDLE',
+        CameraRuntimeState.requestingPermissions => 'ALLOW CAMERA + MIC',
+        CameraRuntimeState.opening => 'OPENING CAMERA 0',
+        CameraRuntimeState.ready => 'CAMERA2 READY',
+        CameraRuntimeState.preparingRecording => 'PREPARING $resolution',
+        CameraRuntimeState.recording => 'RECORDING $resolution$fps',
+        CameraRuntimeState.paused => 'CAMERA PAUSED',
+        CameraRuntimeState.error => 'CAMERA ERROR',
+      };
 
   String get actualExposureLabel {
     final int? exposureNs = _actualExposureTimeNs;
@@ -321,8 +381,10 @@ class CameraUiController extends ChangeNotifier {
     );
     try {
       _cameraInitialization = await _nativeCamera.initialize();
+      _previewRotationDegrees = _cameraInitialization!.rotationDegrees;
       _runtimeState = CameraRuntimeState.ready;
       _cameraError = null;
+      await _nativeCamera.setVolumeZoomEnabled(_section == AppSection.camera);
       await _applyNativeControls();
     } catch (error) {
       _runtimeState = CameraRuntimeState.error;
@@ -364,6 +426,9 @@ class CameraUiController extends ChangeNotifier {
     _section = value;
     _activeControl = null;
     notifyListeners();
+    if (!allowSimulation && _cameraInitialization != null) {
+      unawaited(_nativeCamera.setVolumeZoomEnabled(value == AppSection.camera));
+    }
   }
 
   Future<void> setCaptureOrientation(CaptureOrientation value) async {
@@ -380,6 +445,32 @@ class CameraUiController extends ChangeNotifier {
               DeviceOrientation.landscapeRight,
             ],
     );
+    // Android updates Display rotation after the orientation request. Refresh
+    // until Camera2 reports a rotation parity matching the selected layout.
+    for (int attempt = 0; attempt < 6; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      await refreshPreviewOrientation();
+      final bool portraitRotation = previewQuarterTurns.isOdd;
+      if (portraitRotation == (value == CaptureOrientation.portrait)) break;
+    }
+  }
+
+  Future<void> refreshPreviewOrientation() async {
+    if (allowSimulation || _cameraInitialization == null) return;
+    try {
+      final Map<Object?, Object?> response =
+          await _nativeCamera.getOrientation();
+      final Object? degrees = response['rotationDegrees'];
+      if (degrees is num) {
+        final int next = degrees.toInt();
+        if (_previewRotationDegrees != next) {
+          _previewRotationDegrees = next;
+          notifyListeners();
+        }
+      }
+    } catch (_) {
+      // Orientation refresh is best effort; the last valid value remains.
+    }
   }
 
   void setSharpnessMode(SharpnessMode value) {
@@ -394,6 +485,37 @@ class CameraUiController extends ChangeNotifier {
     _noiseReductionMode = value;
     notifyListeners();
     _scheduleNativeControlApply();
+  }
+
+  void setRecordingMode(RecordingMode value) {
+    if (_recording || _recordingMode == value) return;
+    _recordingMode = value;
+    resolution = value.hudLabel;
+    fps = '${value.fps}';
+    notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
+  void setBitratePreset(BitratePreset value) {
+    if (_recording || _bitratePreset == value) return;
+    _bitratePreset = value;
+    codec = 'HEVC ${value.display}';
+    notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
+  void setStabilizationMode(StabilizationMode value) {
+    if (_stabilizationMode == value) return;
+    _stabilizationMode = value;
+    notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
+  void cycleStabilizationMode() {
+    const List<StabilizationMode> modes = StabilizationMode.values;
+    setStabilizationMode(
+      modes[(modes.indexOf(_stabilizationMode) + 1) % modes.length],
+    );
   }
 
   void setSettingsPage(SettingsPage value) {
@@ -563,9 +685,8 @@ class CameraUiController extends ChangeNotifier {
 
   void setZoomRatio(double ratio, {int rampDurationMs = 120}) {
     if (controlsLocked) return;
-    final double clamped = ratio
-        .clamp(minimumZoomRatio, maximumZoomRatio)
-        .toDouble();
+    final double clamped =
+        ratio.clamp(minimumZoomRatio, maximumZoomRatio).toDouble();
     if ((clamped - _zoomRatio).abs() < .002) return;
     _zoomRatio = clamped;
     notifyListeners();
@@ -604,6 +725,7 @@ class CameraUiController extends ChangeNotifier {
     if (controlsLocked) return;
     _aeAfLocked = false;
     _focusUiState = FocusUiState.hidden;
+    _activeControl = null;
     if (enabled) {
       iso = 'AUTO';
       focus = 'AUTO';
@@ -736,13 +858,15 @@ class CameraUiController extends ChangeNotifier {
     notifyListeners();
     try {
       if (_recording) {
-        final Map<Object?, Object?> response = await _nativeCamera
-            .stopRecording();
+        final Map<Object?, Object?> response =
+            await _nativeCamera.stopRecording();
         final Object? uri = response['uri'];
         if (uri != null) _lastClipUri = '$uri';
         _setRecordingState(false);
         _runtimeState = CameraRuntimeState.ready;
       } else {
+        _controlApplyDebounce?.cancel();
+        await _applyNativeControls();
         await _nativeCamera.startRecording();
         _setRecordingState(true);
         _runtimeState = CameraRuntimeState.recording;
@@ -806,8 +930,8 @@ class CameraUiController extends ChangeNotifier {
         // backlog of stale Camera2 requests.
         final double target = _pendingZoomCommand!;
         _pendingZoomCommand = null;
-        final Map<Object?, Object?> response = await _nativeCamera
-            .setZoomTarget(target);
+        final Map<Object?, Object?> response =
+            await _nativeCamera.setZoomTarget(target);
         final Object? actual = response['actualZoomRatio'];
         if (actual is num) _actualZoomRatio = actual.toDouble();
         notifyListeners();
@@ -833,8 +957,8 @@ class CameraUiController extends ChangeNotifier {
 
   Future<void> _applyNativeControls() async {
     final double angle = double.tryParse(shutter.replaceAll('°', '')) ?? 180.0;
-    final int exposureTimeNs = ((1000000000 / nominalFps) * (angle / 360))
-        .round();
+    final int exposureTimeNs =
+        ((1000000000 / nominalFps) * (angle / 360)).round();
     final bool useAutoExposure = iso == 'AUTO';
     final int manualIso = _manualIso;
     final bool useAutoFocus = focus == 'AUTO';
@@ -853,6 +977,11 @@ class CameraUiController extends ChangeNotifier {
         'ois': true,
         'sharpnessMode': _sharpnessMode.camera2Value,
         'noiseReductionMode': _noiseReductionMode.camera2Value,
+        'recordWidth': _recordingMode.width,
+        'recordHeight': _recordingMode.height,
+        'recordFps': _recordingMode.fps,
+        'videoBitRate': _bitratePreset.bitsPerSecond,
+        'stabilizationMode': _stabilizationMode.nativeValue,
       });
     } catch (error) {
       _cameraError = _friendlyPlatformError(error);
@@ -873,6 +1002,13 @@ class CameraUiController extends ChangeNotifier {
       }
       final Object? zoomValue = event['zoomRatio'];
       if (zoomValue is num) _actualZoomRatio = zoomValue.toDouble();
+      final bool volumeZoomActive = event['volumeZoomActive'] == true;
+      final Object? returnedTarget = event['zoomTargetRatio'];
+      if (volumeZoomActive && zoomValue is num) {
+        _zoomRatio = zoomValue.toDouble();
+      } else if (returnedTarget is num) {
+        _zoomRatio = returnedTarget.toDouble();
+      }
       final Object? measuredFps = event['measuredPreviewFps'];
       if (measuredFps is num) _measuredPreviewFps = measuredFps.toDouble();
       final Object? zoomVelocity = event['zoomVelocityStopsPerSecond'];
@@ -907,6 +1043,10 @@ class CameraUiController extends ChangeNotifier {
       _actualEdgeMode = _eventInt(event['edgeMode']) ?? _actualEdgeMode;
       _actualNoiseReductionMode =
           _eventInt(event['noiseReductionMode']) ?? _actualNoiseReductionMode;
+      _actualOisMode = _eventInt(event['oisMode']) ?? _actualOisMode;
+      _actualVideoStabilizationMode =
+          _eventInt(event['videoStabilizationMode']) ??
+              _actualVideoStabilizationMode;
     } else if (type == 'level') {
       final Object? roll = event['rollDegrees'];
       final Object? pitch = event['pitchDegrees'];
@@ -1007,25 +1147,25 @@ class CameraUiController extends ChangeNotifier {
 
 const Map<CameraControl, List<String>> cameraControlOptions =
     <CameraControl, List<String>>{
-      CameraControl.lens: <String>['MAIN'],
-      CameraControl.fps: <String>['24', '25', '30'],
-      CameraControl.shutter: <String>['90°', '144°', '172.8°', '180°', '216°'],
-      CameraControl.iso: <String>['AUTO', '50', '100', '200', '400', '800'],
-      CameraControl.whiteBalance: <String>[
-        'AUTO',
-        '3200K',
-        '4300K',
-        '5600K',
-        '6500K',
-      ],
-      CameraControl.tint: <String>['−20', '−10', '+0', '+10', '+20'],
-      CameraControl.focus: <String>['AUTO', '0.1m', '0.3m', '1m', '3m', '∞'],
-      CameraControl.exposureCompensation: <String>[
-        '-2.0',
-        '-1.0',
-        '+0.0',
-        '+1.0',
-        '+2.0',
-      ],
-      CameraControl.zoom: <String>['1x', '2x', '4x', '10x'],
-    };
+  CameraControl.lens: <String>['MAIN'],
+  CameraControl.fps: <String>['24', '25', '30'],
+  CameraControl.shutter: <String>['90°', '144°', '172.8°', '180°', '216°'],
+  CameraControl.iso: <String>['AUTO', '50', '100', '200', '400', '800'],
+  CameraControl.whiteBalance: <String>[
+    'AUTO',
+    '3200K',
+    '4300K',
+    '5600K',
+    '6500K',
+  ],
+  CameraControl.tint: <String>['−20', '−10', '+0', '+10', '+20'],
+  CameraControl.focus: <String>['AUTO', '0.1m', '0.3m', '1m', '3m', '∞'],
+  CameraControl.exposureCompensation: <String>[
+    '-2.0',
+    '-1.0',
+    '+0.0',
+    '+1.0',
+    '+2.0',
+  ],
+  CameraControl.zoom: <String>['1x', '2x', '4x', '10x'],
+};

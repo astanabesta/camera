@@ -78,6 +78,13 @@ void main() {
     controller.setNoiseReductionMode(NoiseReductionMode.off);
     expect(controller.sharpnessMode, SharpnessMode.highQuality);
     expect(controller.noiseReductionMode, NoiseReductionMode.off);
+    controller.setRecordingMode(RecordingMode.fhd30);
+    controller.setBitratePreset(BitratePreset.max);
+    controller.setStabilizationMode(StabilizationMode.electronic);
+    expect(controller.resolution, 'FHD');
+    expect(controller.fps, '30');
+    expect(controller.codec, 'HEVC 100 Mb/s');
+    expect(controller.stabilizationMode, StabilizationMode.electronic);
     controller.dispose();
   });
 
@@ -97,6 +104,9 @@ void main() {
     expect(find.textContaining('ZIRCON TEST 01'), findsWidgets);
     expect(find.textContaining('HEVC 80 Mb/s'), findsOneWidget);
     expect(find.text('FPS'), findsOneWidget);
+    expect(find.text('ISO'), findsNothing);
+    expect(find.text('SHUTTER'), findsNothing);
+    expect(find.text('WB'), findsNothing);
     expect(find.byIcon(Icons.videocam_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -108,6 +118,11 @@ void main() {
 
     await tester.tap(find.text('FPS').first);
     await tester.pumpAndSettle();
+    controller.setMasterAuto(false);
+    await tester.pumpAndSettle();
+    expect(find.text('ISO'), findsOneWidget);
+    expect(find.text('SHUTTER'), findsOneWidget);
+    expect(find.text('WB'), findsOneWidget);
     await tester.tap(find.text('ISO'));
     await tester.pumpAndSettle();
     expect(find.text('50–800 • LOG SCALE'), findsOneWidget);
@@ -125,6 +140,10 @@ void main() {
     expect(find.text('SETTINGS'), findsWidgets);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Codec'), findsOneWidget);
+    expect(find.text('4K'), findsOneWidget);
+    expect(find.text('1080p'), findsOneWidget);
+    expect(find.text('4:3 1440p'), findsOneWidget);
+    expect(find.textContaining('Max 100 Mb/s'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Monitor'));
@@ -177,6 +196,8 @@ void main() {
     expect(find.byType(RecordButton), findsOneWidget);
     expect(tester.takeException(), isNull);
 
+    controller.setMasterAuto(false);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('ISO'));
     await tester.pumpAndSettle();
     expect(find.text('50–800 • LOG SCALE'), findsOneWidget);

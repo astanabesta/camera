@@ -105,10 +105,13 @@ class CameraScreen extends StatelessWidget {
                   context,
                   'Monitor LUT is pass-through only. Real GPU 3D LUT processing remains a validated future milestone.',
                 ),
-                onStabilization: () => _notice(
-                  context,
-                  'This baseline requests optical OIS. OFF/OIS/EIS switching requires restored native source and device proof.',
-                ),
+                onStabilization: () {
+                  controller.cycleStabilizationMode();
+                  _notice(
+                    context,
+                    'Stabilization request: ${controller.stabilizationMode.label}. Result: ${controller.actualStabilizationLabel}.',
+                  );
+                },
                 onMonitoring: () => _showMonitorTools(context, controller),
               ),
               SideRail(controller: controller, showRecord: false),
@@ -483,16 +486,22 @@ class _PortraitTop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const List<(CameraControl, String)> controls = <(CameraControl, String)>[
-      (CameraControl.lens, 'LENS'),
-      (CameraControl.fps, 'FPS'),
-      (CameraControl.shutter, 'SHUTTER'),
-      (CameraControl.iso, 'ISO'),
-      (CameraControl.whiteBalance, 'WB'),
-      (CameraControl.tint, 'TINT'),
-      (CameraControl.focus, 'FOCUS'),
-      (CameraControl.exposureCompensation, 'EV'),
-    ];
+    final bool automatic = controller.operationMode == CameraOperationMode.auto;
+    final List<(CameraControl, String)> controls = automatic
+        ? <(CameraControl, String)>[
+            (CameraControl.lens, 'LENS'),
+            (CameraControl.fps, 'FPS'),
+          ]
+        : <(CameraControl, String)>[
+            (CameraControl.lens, 'LENS'),
+            (CameraControl.fps, 'FPS'),
+            (CameraControl.shutter, 'SHUTTER'),
+            (CameraControl.iso, 'ISO'),
+            (CameraControl.whiteBalance, 'WB'),
+            (CameraControl.tint, 'TINT'),
+            (CameraControl.focus, 'FOCUS'),
+            (CameraControl.exposureCompensation, 'EV'),
+          ];
     return SafeArea(
       bottom: false,
       child: Container(
@@ -520,9 +529,18 @@ class _PortraitTop extends StatelessWidget {
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                 scrollDirection: Axis.horizontal,
-                itemCount: controls.length,
+                itemCount: controls.length + (automatic ? 1 : 0),
                 separatorBuilder: (_, __) => const SizedBox(width: 5),
                 itemBuilder: (BuildContext context, int index) {
+                  if (automatic && index == controls.length) {
+                    return _PortraitParameter(
+                      label: 'FORMAT',
+                      value: controller.recordingMode.hudLabel,
+                      selected: false,
+                      enabled: true,
+                      onTap: () {},
+                    );
+                  }
                   final (CameraControl control, String label) = controls[index];
                   return _PortraitParameter(
                     label: label,
@@ -899,97 +917,134 @@ class _Shading extends StatelessWidget {
 class _TopHud extends StatelessWidget {
   const _TopHud({required this.controller});
   final CameraUiController controller;
+
+  String get _format => switch (controller.recordingMode) {
+    RecordingMode.uhd30 => 'UHD 16:9',
+    RecordingMode.fhd30 => 'FHD 16:9',
+    RecordingMode.fourThree30 => '1440p 4:3',
+  };
+
+  _Hud get _mode => _Hud(
+    7,
+    'MODE',
+    switch (controller.operationMode) {
+      CameraOperationMode.auto => 'AUTO',
+      CameraOperationMode.manual => 'MANUAL',
+      CameraOperationMode.mixed => 'MIXED',
+    },
+    () => controller.setMasterAuto(
+      controller.operationMode != CameraOperationMode.auto,
+    ),
+    selected: controller.operationMode == CameraOperationMode.manual,
+    warning: controller.operationMode == CameraOperationMode.mixed,
+  );
+
   @override
   Widget build(BuildContext context) {
+    final bool automatic = controller.operationMode == CameraOperationMode.auto;
     return Container(
       height: 52,
       decoration: const BoxDecoration(
         color: Color(0xE805070A),
         border: Border(bottom: BorderSide(color: ZirconColors.stroke)),
       ),
-      child: Row(
-        children: <Widget>[
-          _Hud(
-            7,
-            'LENS',
-            controller.lens,
-            () => controller.selectControl(CameraControl.lens),
-            selected: controller.activeControl == CameraControl.lens,
-          ),
-          _Hud(
-            5,
-            'FPS',
-            controller.fps,
-            () => controller.selectControl(CameraControl.fps),
-            selected: controller.activeControl == CameraControl.fps,
-            warning: true,
-          ),
-          _Hud(
-            8,
-            'SHUTTER',
-            controller.shutter,
-            () => controller.selectControl(CameraControl.shutter),
-            selected: controller.activeControl == CameraControl.shutter,
-          ),
-          _Hud(
-            6,
-            'IRIS',
-            'f/1.65',
-            () => CameraScreen._notice(
-              context,
-              'The zircon main camera has a fixed f/1.65 aperture.',
+      child: automatic
+          ? Row(
+              children: <Widget>[
+                _Hud(
+                  7,
+                  'LENS',
+                  controller.lens,
+                  () => controller.selectControl(CameraControl.lens),
+                ),
+                _Hud(
+                  5,
+                  'FPS',
+                  controller.fps,
+                  () => controller.selectControl(CameraControl.fps),
+                ),
+                Expanded(flex: 19, child: _Timecode(controller: controller)),
+                _Hud(
+                  8,
+                  'FORMAT',
+                  _format,
+                  () => CameraScreen._notice(
+                    context,
+                    '${controller.recordingMode.width}×${controller.recordingMode.height} • ${controller.recordingMode.fps} fps • ${controller.bitratePreset.display}',
+                  ),
+                ),
+                _mode,
+              ],
+            )
+          : Row(
+              children: <Widget>[
+                _Hud(
+                  7,
+                  'LENS',
+                  controller.lens,
+                  () => controller.selectControl(CameraControl.lens),
+                  selected: controller.activeControl == CameraControl.lens,
+                ),
+                _Hud(
+                  5,
+                  'FPS',
+                  controller.fps,
+                  () => controller.selectControl(CameraControl.fps),
+                  selected: controller.activeControl == CameraControl.fps,
+                ),
+                _Hud(
+                  8,
+                  'SHUTTER',
+                  controller.shutter,
+                  () => controller.selectControl(CameraControl.shutter),
+                  selected: controller.activeControl == CameraControl.shutter,
+                ),
+                _Hud(
+                  6,
+                  'IRIS',
+                  'f/1.65',
+                  () => CameraScreen._notice(
+                    context,
+                    'The zircon main camera has a fixed f/1.65 aperture.',
+                  ),
+                  locked: true,
+                ),
+                Expanded(flex: 19, child: _Timecode(controller: controller)),
+                _Hud(
+                  6,
+                  'ISO',
+                  controller.iso,
+                  () => controller.selectControl(CameraControl.iso),
+                  selected: controller.activeControl == CameraControl.iso,
+                ),
+                _Hud(
+                  8,
+                  'WB',
+                  controller.whiteBalance,
+                  () => controller.selectControl(CameraControl.whiteBalance),
+                  selected:
+                      controller.activeControl == CameraControl.whiteBalance,
+                ),
+                _Hud(
+                  5,
+                  'TINT',
+                  controller.tint,
+                  () => controller.selectControl(CameraControl.tint),
+                  selected: controller.activeControl == CameraControl.tint,
+                  locked: true,
+                ),
+                _Hud(
+                  8,
+                  'FORMAT',
+                  _format,
+                  () => CameraScreen._notice(
+                    context,
+                    '${controller.recordingMode.width}×${controller.recordingMode.height} • ${controller.recordingMode.fps} fps • ${controller.bitratePreset.display}',
+                  ),
+                ),
+                _mode,
+              ],
             ),
-            locked: true,
-          ),
-          Expanded(flex: 19, child: _Timecode(controller: controller)),
-          _Hud(
-            6,
-            'ISO',
-            controller.iso,
-            () => controller.selectControl(CameraControl.iso),
-            selected: controller.activeControl == CameraControl.iso,
-          ),
-          _Hud(
-            8,
-            'WB',
-            controller.whiteBalance,
-            () => controller.selectControl(CameraControl.whiteBalance),
-            selected: controller.activeControl == CameraControl.whiteBalance,
-          ),
-          _Hud(
-            5,
-            'TINT',
-            controller.tint,
-            () => controller.selectControl(CameraControl.tint),
-            selected: controller.activeControl == CameraControl.tint,
-            locked: true,
-          ),
-          _Hud(
-            7,
-            'FORMAT',
-            'UHD 16:9',
-            () => CameraScreen._notice(
-              context,
-              'Preserved recorder format: UHD 3840×2160, HEVC Main 8-bit.',
-            ),
-            locked: true,
-          ),
-          _Hud(
-            7,
-            'MODE',
-            switch (controller.operationMode) {
-              CameraOperationMode.auto => 'AUTO',
-              CameraOperationMode.manual => 'MANUAL',
-              CameraOperationMode.mixed => 'MIXED',
-            },
-            () => controller.setMasterAuto(
-              controller.operationMode != CameraOperationMode.auto,
-            ),
-            selected: controller.operationMode == CameraOperationMode.manual,
-            warning: controller.operationMode == CameraOperationMode.mixed,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1286,9 +1341,9 @@ class _Project extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 3),
-        const Text(
-          'HEVC 80 Mb/s',
-          style: TextStyle(
+        Text(
+          'HEVC ${controller.bitratePreset.display}',
+          style: const TextStyle(
             color: ZirconColors.accent,
             fontSize: 9,
             fontWeight: FontWeight.w800,

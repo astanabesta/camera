@@ -36,104 +36,103 @@ class VerticalControlPanel extends StatelessWidget {
   }
 
   Widget _body(CameraControl control) => switch (control) {
-        CameraControl.iso => _ruler(
-            control,
-            0,
-            4,
-            48,
-            1 / 12,
-            '50–800 • LOG SCALE',
-            const <_Preset>[
-              _Preset(0, '50'),
-              _Preset(1, '100'),
-              _Preset(2, '200'),
-              _Preset(3, '400 HCG*'),
-              _Preset(4, '800'),
-            ],
-            (double value) => '${(50 * math.pow(2, value)).round()}',
-          ),
-        CameraControl.shutter => _ruler(
-            control,
-            11.25,
-            345.6,
-            3343,
-            .1,
-            'ANGLE • 0.1° FINE',
-            const <_Preset>[
-              _Preset(90, '90°'),
-              _Preset(144, '144°'),
-              _Preset(172.8, '172.8°'),
-              _Preset(180, '180°'),
-              _Preset(216, '216°'),
-            ],
-            (double value) => '${value.toStringAsFixed(1)}°',
-          ),
-        CameraControl.focus => _ruler(
-            control,
-            0,
-            10,
-            1000,
-            .01,
-            '0–10 DIOPTERS • FINE PULL',
-            const <_Preset>[
-              _Preset(0, '∞'),
-              _Preset(.333333, '3m'),
-              _Preset(1, '1m'),
-              _Preset(3.333333, '30cm'),
-              _Preset(10, '10cm'),
-            ],
-            _focus,
-          ),
-        CameraControl.exposureCompensation => _ruler(
-            control,
-            -4,
-            4,
-            48,
-            1 / 6,
-            'AUTO EXPOSURE • ±4 EV',
-            const <_Preset>[
-              _Preset(-2, '-2'),
-              _Preset(-1, '-1'),
-              _Preset(0, '0'),
-              _Preset(1, '+1'),
-              _Preset(2, '+2'),
-            ],
-            (double value) =>
-                '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}',
-          ),
-        CameraControl.whiteBalance => _whiteBalance(),
-        CameraControl.fps => const _FrameRatePanel(),
-        CameraControl.lens => const _LockedPanel(
-            title: 'CAMERA 0 • MAIN',
-            detail:
-                'Only the main rear camera is publicly exposed as a cinema-capable Camera2 device.',
-            tags: <String>['MAIN', '6.14 mm', 'f/1.65'],
-          ),
-        CameraControl.tint => const _LockedPanel(
-            title: 'TINT CALIBRATION GATED',
-            detail:
-                'Exact tint requires measured per-channel gains. No invented calibration is exposed.',
-            tags: <String>['AUTO', 'NOT CALIBRATED'],
-          ),
-        CameraControl.zoom => _ruler(
-            control,
-            math.log(controller.minimumZoomRatio) / math.ln2,
-            math.log(controller.maximumZoomRatio) / math.ln2,
-            180,
-            1 / 60,
-            'LOG₂ RAMP • ACT ${_zoom(controller.actualZoomRatio ?? 1.0)}',
-            <_Preset>[
-              const _Preset(0, '1×'),
-              const _Preset(1, '2×'),
-              const _Preset(2, '4×'),
-              _Preset(
-                math.log(controller.maximumZoomRatio) / math.ln2,
-                '${_zoom(controller.maximumZoomRatio)} MAX',
-              ),
-            ],
-            (double value) => _zoom(math.pow(2, value).toDouble()),
-          ),
-      };
+    CameraControl.iso => _ruler(
+      control,
+      0,
+      4,
+      48,
+      1 / 12,
+      '50–800 • LOG SCALE',
+      const <_Preset>[
+        _Preset(0, '50'),
+        _Preset(1, '100'),
+        _Preset(2, '200'),
+        _Preset(3, '400 HCG*'),
+        _Preset(4, '800'),
+      ],
+      (double value) => '${(50 * math.pow(2, value)).round()}',
+    ),
+    CameraControl.shutter => _ruler(
+      control,
+      11.25,
+      345.6,
+      3343,
+      .1,
+      'ANGLE • 0.1° FINE',
+      const <_Preset>[
+        _Preset(90, '90°'),
+        _Preset(144, '144°'),
+        _Preset(172.8, '172.8°'),
+        _Preset(180, '180°'),
+        _Preset(216, '216°'),
+      ],
+      (double value) => '${value.toStringAsFixed(1)}°',
+    ),
+    CameraControl.focus => _ruler(
+      control,
+      0,
+      10,
+      1000,
+      .01,
+      '0–10 DIOPTERS • FINE PULL',
+      const <_Preset>[
+        _Preset(0, '∞'),
+        _Preset(.333333, '3m'),
+        _Preset(1, '1m'),
+        _Preset(3.333333, '30cm'),
+        _Preset(10, '10cm'),
+      ],
+      _focus,
+    ),
+    CameraControl.exposureCompensation => _ruler(
+      control,
+      -4,
+      4,
+      48,
+      1 / 6,
+      'AUTO EXPOSURE • ±4 EV',
+      const <_Preset>[
+        _Preset(-2, '-2'),
+        _Preset(-1, '-1'),
+        _Preset(0, '0'),
+        _Preset(1, '+1'),
+        _Preset(2, '+2'),
+      ],
+      (double value) => '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}',
+    ),
+    CameraControl.whiteBalance => _whiteBalance(),
+    CameraControl.fps => const _FrameRatePanel(),
+    CameraControl.lens => const _LockedPanel(
+      title: 'CAMERA 0 • MAIN',
+      detail:
+          'Only the main rear camera is publicly exposed as a cinema-capable Camera2 device.',
+      tags: <String>['MAIN', '6.14 mm', 'f/1.65'],
+    ),
+    CameraControl.tint => const _LockedPanel(
+      title: 'TINT CALIBRATION GATED',
+      detail:
+          'Exact tint requires measured per-channel gains. No invented calibration is exposed.',
+      tags: <String>['AUTO', 'NOT CALIBRATED'],
+    ),
+    CameraControl.zoom => _ruler(
+      control,
+      math.log(controller.minimumZoomRatio) / math.ln2,
+      math.log(controller.maximumZoomRatio) / math.ln2,
+      180,
+      1 / 60,
+      'LOG₂ RAMP • ACT ${_zoom(controller.actualZoomRatio ?? 1.0)}',
+      <_Preset>[
+        const _Preset(0, '1×'),
+        const _Preset(1, '2×'),
+        const _Preset(2, '4×'),
+        _Preset(
+          math.log(controller.maximumZoomRatio) / math.ln2,
+          '${_zoom(controller.maximumZoomRatio)} MAX',
+        ),
+      ],
+      (double value) => _zoom(math.pow(2, value).toDouble()),
+    ),
+  };
 
   Widget _ruler(
     CameraControl control,
@@ -145,8 +144,10 @@ class VerticalControlPanel extends StatelessWidget {
     List<_Preset> presets,
     String Function(double) formatter,
   ) {
-    final double value =
-        controller.numericControlValue(control).clamp(min, max).toDouble();
+    final double value = controller
+        .numericControlValue(control)
+        .clamp(min, max)
+        .toDouble();
     return Column(
       children: <Widget>[
         Padding(
@@ -181,34 +182,36 @@ class VerticalControlPanel extends StatelessWidget {
                 width: 74,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: presets.map((_Preset preset) {
-                    final bool selected =
-                        (value - preset.value).abs() < step * 1.1;
-                    return SizedBox(
-                      width: 68,
-                      height: 25,
-                      child: TextButton(
-                        onPressed: () => controller.setNumericControlValue(
-                          control,
-                          preset.value,
-                        ),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          foregroundColor: selected
-                              ? ZirconColors.accent
-                              : ZirconColors.text,
-                          backgroundColor: selected
-                              ? ZirconColors.accentSoft
-                              : Colors.transparent,
-                          textStyle: const TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
+                  children: presets
+                      .map((_Preset preset) {
+                        final bool selected =
+                            (value - preset.value).abs() < step * 1.1;
+                        return SizedBox(
+                          width: 68,
+                          height: 25,
+                          child: TextButton(
+                            onPressed: () => controller.setNumericControlValue(
+                              control,
+                              preset.value,
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              foregroundColor: selected
+                                  ? ZirconColors.accent
+                                  : ZirconColors.text,
+                              backgroundColor: selected
+                                  ? ZirconColors.accentSoft
+                                  : Colors.transparent,
+                              textStyle: const TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            child: Text(preset.label),
                           ),
-                        ),
-                        child: Text(preset.label),
-                      ),
-                    );
-                  }).toList(growable: false),
+                        );
+                      })
+                      .toList(growable: false),
                 ),
               ),
               Expanded(
@@ -407,16 +410,16 @@ class _Header extends StatelessWidget {
   }
 
   static String _title(CameraControl value) => switch (value) {
-        CameraControl.lens => 'LENS',
-        CameraControl.fps => 'FRAME RATE',
-        CameraControl.shutter => 'SHUTTER ANGLE',
-        CameraControl.iso => 'SENSOR ISO',
-        CameraControl.whiteBalance => 'WHITE BALANCE',
-        CameraControl.tint => 'TINT',
-        CameraControl.focus => 'FOCUS',
-        CameraControl.exposureCompensation => 'EXPOSURE BIAS',
-        CameraControl.zoom => 'ZOOM',
-      };
+    CameraControl.lens => 'LENS',
+    CameraControl.fps => 'FRAME RATE',
+    CameraControl.shutter => 'SHUTTER ANGLE',
+    CameraControl.iso => 'SENSOR ISO',
+    CameraControl.whiteBalance => 'WHITE BALANCE',
+    CameraControl.tint => 'TINT',
+    CameraControl.focus => 'FOCUS',
+    CameraControl.exposureCompensation => 'EXPOSURE BIAS',
+    CameraControl.zoom => 'ZOOM',
+  };
 }
 
 bool _supportsAuto(CameraControl control) =>
@@ -543,24 +546,24 @@ class _Rate extends StatelessWidget {
   final bool active;
   @override
   Widget build(BuildContext context) => Container(
-        height: 38,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? ZirconColors.accentSoft : const Color(0xFF11161D),
-          border: Border.all(
-            color: active ? ZirconColors.accent : ZirconColors.stroke,
-          ),
-          borderRadius: BorderRadius.circular(ZirconRadius.sm),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? ZirconColors.accent : ZirconColors.textDim,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
+    height: 38,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: active ? ZirconColors.accentSoft : const Color(0xFF11161D),
+      border: Border.all(
+        color: active ? ZirconColors.accent : ZirconColors.stroke,
+      ),
+      borderRadius: BorderRadius.circular(ZirconRadius.sm),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: active ? ZirconColors.accent : ZirconColors.textDim,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
 }
 
 class _LockedPanel extends StatelessWidget {
@@ -574,64 +577,64 @@ class _LockedPanel extends StatelessWidget {
   final List<String> tags;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Icon(
-              Icons.lock_outline_rounded,
-              color: ZirconColors.warning,
-              size: 24,
-            ),
-            const SizedBox(height: 9),
-            Text(
-              title,
-              style: const TextStyle(
-                color: ZirconColors.warning,
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              detail,
-              style: const TextStyle(
-                color: ZirconColors.textMuted,
-                fontSize: 9,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 5,
-              runSpacing: 5,
-              children: tags
-                  .map(
-                    (String tag) => Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: ZirconColors.stroke),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        tag,
-                        style: const TextStyle(
-                          color: ZirconColors.text,
-                          fontSize: 7,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-          ],
+    padding: const EdgeInsets.all(12),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Icon(
+          Icons.lock_outline_rounded,
+          color: ZirconColors.warning,
+          size: 24,
         ),
-      );
+        const SizedBox(height: 9),
+        Text(
+          title,
+          style: const TextStyle(
+            color: ZirconColors.warning,
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          detail,
+          style: const TextStyle(
+            color: ZirconColors.textMuted,
+            fontSize: 9,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: tags
+              .map(
+                (String tag) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: ZirconColors.stroke),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    tag,
+                    style: const TextStyle(
+                      color: ZirconColors.text,
+                      fontSize: 7,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Preset {

@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.view.KeyEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -59,6 +60,11 @@ public final class MainActivity extends FlutterActivity {
             case "initialize" -> ensurePermissionsAndInitialize(result);
             case "setControls" -> cameraEngine.updateControls(argumentsMap(call), result);
             case "setZoomTarget" -> cameraEngine.setZoomTarget(argumentsMap(call), result);
+            case "setVolumeZoomEnabled" -> {
+                cameraEngine.setVolumeZoomEnabled(call.argument("enabled") == Boolean.TRUE);
+                result.success(null);
+            }
+            case "getOrientation" -> cameraEngine.getOrientation(result);
             case "tapToFocus" -> cameraEngine.tapToFocus(argumentsMap(call), result);
             case "setAeAfLock" -> cameraEngine.setAeAfLock(
                     call.argument("locked") == Boolean.TRUE, result);
@@ -149,6 +155,21 @@ public final class MainActivity extends FlutterActivity {
     private void emitCameraEvent(Map<String, Object> event) {
         EventChannel.EventSink sink = eventSink;
         if (sink != null) sink.success(event);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int direction = switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_VOLUME_UP -> 1;
+            case KeyEvent.KEYCODE_VOLUME_DOWN -> -1;
+            default -> 0;
+        };
+        if (direction != 0 && cameraEngine != null &&
+                cameraEngine.handleVolumeZoomKey(
+                        direction, event.getAction() == KeyEvent.ACTION_DOWN)) {
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

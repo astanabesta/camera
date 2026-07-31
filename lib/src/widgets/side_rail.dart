@@ -156,8 +156,12 @@ class CameraToolRail extends StatelessWidget {
           const SizedBox(height: 3),
           _ToolButton(
             icon: Icons.vibration_rounded,
-            label: 'OIS',
-            warning: true,
+            label: switch (controller.stabilizationMode) {
+              StabilizationMode.off => 'OFF',
+              StabilizationMode.optical => 'OIS',
+              StabilizationMode.electronic => 'EIS',
+            },
+            selected: controller.stabilizationMode != StabilizationMode.off,
             onTap: onStabilization,
           ),
           const SizedBox(height: 3),

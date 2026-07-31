@@ -66,13 +66,13 @@ public final class CameraEngine implements SensorEventListener {
     private static final String CAMERA_ID = "0";
     private static final int PREVIEW_WIDTH = 1920;
     private static final int PREVIEW_HEIGHT = 1080;
-    private static final int RECORD_WIDTH = 3840;
-    private static final int RECORD_HEIGHT = 2160;
-    private static final int RECORD_FPS = 30;
-    private static final int VIDEO_BIT_RATE = 80_000_000;
+    private static final int DEFAULT_RECORD_WIDTH = 3840;
+    private static final int DEFAULT_RECORD_HEIGHT = 2160;
+    private static final int DEFAULT_RECORD_FPS = 30;
+    private static final int DEFAULT_VIDEO_BIT_RATE = 80_000_000;
+    private static final int MAX_VIDEO_BIT_RATE = 100_000_000;
     private static final int AUDIO_BIT_RATE = 192_000;
     private static final int AUDIO_SAMPLE_RATE = 48_000;
-    private static final long FRAME_DURATION_NS = 33_333_333L;
     private static final double LOG_2 = Math.log(2.0);
     // Zircon-specific starting values. Final tuning is based on measured
     // capture-result cadence, not assumed 30 fps timer ticks.
@@ -108,7 +108,7 @@ public final class CameraEngine implements SensorEventListener {
     private MethodChannel.Result pendingInitializeResult;
     private MethodChannel.Result pendingRecordStartResult;
 
-    private boolean initialized;
+    private volatile boolean initialized;
     private boolean opening;
     private boolean recording;
     private boolean autoExposure = true;
@@ -120,6 +120,12 @@ public final class CameraEngine implements SensorEventListener {
     private String requestedWhiteBalance = "AUTO";
     private int requestedSharpnessMode = CaptureRequest.EDGE_MODE_OFF;
     private int requestedNoiseReductionMode = CaptureRequest.NOISE_REDUCTION_MODE_MINIMAL;
+    private int requestedRecordWidth = DEFAULT_RECORD_WIDTH;
+    private int requestedRecordHeight = DEFAULT_RECORD_HEIGHT;
+    private int requestedRecordFps = DEFAULT_RECORD_FPS;
+    private int requestedVideoBitRate = DEFAULT_VIDEO_BIT_RATE;
+    // 0=off, 1=optical, 2=electronic.
+    private int requestedStabilizationMode = 1;
     private MeteringRectangle[] requestedAfRegions;
     private MeteringRectangle[] requestedAeRegions;
     private boolean tapAfActive;
@@ -143,6 +149,11 @@ public final class CameraEngine implements SensorEventListener {
     private double captureIntervalEmaNs;
     private long lastCaptureFrameNumber = -1L;
     private long captureFrameGaps;
+    private volatile boolean volumeZoomEnabled = true;
+    private int volumeZoomDirection;
+    private long volumeZoomKeyDownMs;
+    private double zoomDriveVelocityTarget;
+    private boolean zoomDriveBraking;
     private int captureResultCounter;
 
     public CameraEngine(Activity activity, TextureRegistry textureRegistry,
@@ -251,6 +262,10 @@ public final class CameraEngine implements SensorEventListener {
                 if (zoom instanceof Number) {
                     setZoomTargetInternal(((Number) zoom).floatValue());
                 }
+                updateRecordingConfiguration(values);
+                requestedStabilizationMode = clamp(
+                        intValue(values.get("stabilizationMode"),
+                                requestedStabilizationMode), 0, 2);
                 updateRepeatingRequest();
                 Map<String, Object> response = new HashMap<>();
                 response.put("applied", true);
@@ -259,11 +274,38 @@ public final class CameraEngine implements SensorEventListener {
                 response.put("autoFocus", autoFocus);
                 response.put("sharpnessModeRequested", requestedSharpnessMode);
                 response.put("noiseReductionModeRequested", requestedNoiseReductionMode);
+                response.put("recordWidth", requestedRecordWidth);
+                response.put("recordHeight", requestedRecordHeight);
+                response.put("recordFps", requestedRecordFps);
+                response.put("videoBitRate", requestedVideoBitRate);
+                response.put("stabilizationModeRequested", requestedStabilizationMode);
                 replySuccess(result, response);
             } catch (Throwable error) {
                 replyError(result, "CONTROL_FAILED", "Unable to apply camera controls", error);
             }
         });
+    }
+
+    private void updateRecordingConfiguration(Map<String, Object> values) {
+        int width = intValue(values.get("recordWidth"), requestedRecordWidth);
+        int height = intValue(values.get("recordHeight"), requestedRecordHeight);
+        int fps = intValue(values.get("recordFps"), requestedRecordFps);
+        boolean supportedSize =
+                (width == 3840 && height == 2160) ||
+                (width == 1920 && height == 1080) ||
+                (width == 1920 && height == 1440);
+        if (supportedSize && fps == 30) {
+            requestedRecordWidth = width;
+            requestedRecordHeight = height;
+            requestedRecordFps = fps;
+        }
+        requestedVideoBitRate = clamp(
+                intValue(values.get("videoBitRate"), requestedVideoBitRate),
+                1_000_000, MAX_VIDEO_BIT_RATE);
+    }
+
+    private long requestedFrameDurationNs() {
+        return Math.max(1L, 1_000_000_000L / Math.max(1, requestedRecordFps));
     }
 
     /**
@@ -292,6 +334,57 @@ public final class CameraEngine implements SensorEventListener {
                         "Unable to set smooth zoom target", error);
             }
         });
+    }
+
+    public void setVolumeZoomEnabled(boolean enabled) {
+        volumeZoomEnabled = enabled;
+        if (!enabled && cameraHandler != null) {
+            cameraHandler.post(() -> releaseVolumeZoom(false));
+        }
+    }
+
+    public boolean handleVolumeZoomKey(int direction, boolean pressed) {
+        if (!volumeZoomEnabled || !initialized || cameraHandler == null ||
+                direction == 0) return false;
+        cameraHandler.post(() -> {
+            if (pressed) {
+                if (volumeZoomDirection == direction) return;
+                volumeZoomDirection = direction;
+                volumeZoomKeyDownMs = SystemClock.elapsedRealtime();
+                zoomDriveVelocityTarget = direction * 0.70;
+                zoomDriveBraking = false;
+                zoomControllerActive = true;
+            } else if (volumeZoomDirection == direction) {
+                long duration = SystemClock.elapsedRealtime() - volumeZoomKeyDownMs;
+                releaseVolumeZoom(duration < 220L);
+            }
+        });
+        return true;
+    }
+
+    private void releaseVolumeZoom(boolean tap) {
+        int direction = volumeZoomDirection;
+        volumeZoomDirection = 0;
+        zoomDriveVelocityTarget = 0.0;
+        if (tap && direction != 0) {
+            // A quick press nudges by one twelfth of a stop. A hold remains a
+            // continuous velocity control and decelerates when released.
+            double next = zoomLog2 + direction / 12.0;
+            setZoomTargetInternal(zoomRatioFromLog(next));
+        } else {
+            zoomDriveBraking = Math.abs(zoomVelocityStopsPerSecond) >
+                    ZOOM_VELOCITY_EPSILON;
+            zoomControllerActive = zoomDriveBraking;
+            targetZoomLog2 = zoomLog2;
+        }
+    }
+
+    public void getOrientation(MethodChannel.Result result) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("rotationDegrees", previewRotationDegrees());
+        response.put("displayRotationDegrees",
+                rotationToDegrees(activity.getDisplay().getRotation()));
+        replySuccess(result, response);
     }
 
     /**
@@ -680,11 +773,11 @@ public final class CameraEngine implements SensorEventListener {
                             Map<String, Object> response = new HashMap<>();
                             response.put("recording", true);
                             response.put("uri", recordingUri == null ? null : recordingUri.toString());
-                            response.put("width", RECORD_WIDTH);
-                            response.put("height", RECORD_HEIGHT);
-                            response.put("fps", RECORD_FPS);
+                            response.put("width", requestedRecordWidth);
+                            response.put("height", requestedRecordHeight);
+                            response.put("fps", requestedRecordFps);
                             response.put("codec", "HEVC Main 8-bit");
-                            response.put("videoBitRate", VIDEO_BIT_RATE);
+                            response.put("videoBitRate", requestedVideoBitRate);
                             response.put("audio", "AAC 48kHz");
                             MethodChannel.Result pending = pendingRecordStartResult;
                             pendingRecordStartResult = null;
@@ -730,6 +823,8 @@ public final class CameraEngine implements SensorEventListener {
                         event.put("captureIntervalEmaNs", captureIntervalEmaNs);
                     }
                     event.put("captureFrameGaps", captureFrameGaps);
+                    event.put("volumeZoomActive",
+                            volumeZoomDirection != 0 || zoomDriveBraking);
                     putNumber(event, "iso", result.get(CaptureResult.SENSOR_SENSITIVITY));
                     putNumber(event, "exposureTimeNs", result.get(CaptureResult.SENSOR_EXPOSURE_TIME));
                     putNumber(event, "frameDurationNs", result.get(CaptureResult.SENSOR_FRAME_DURATION));
@@ -753,6 +848,10 @@ public final class CameraEngine implements SensorEventListener {
                     putNumber(event, "edgeMode", result.get(CaptureResult.EDGE_MODE));
                     putNumber(event, "noiseReductionMode",
                             result.get(CaptureResult.NOISE_REDUCTION_MODE));
+                    putNumber(event, "oisMode",
+                            result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE));
+                    putNumber(event, "videoStabilizationMode",
+                            result.get(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE));
                     event.put("aeAfLocked", aeAfLocked);
                     if (requestedAfRegions != null || requestedAeRegions != null) {
                         event.put("focusPointX", focusPointX);
@@ -797,6 +896,9 @@ public final class CameraEngine implements SensorEventListener {
     }
 
     private void setZoomTargetInternal(float targetRatio) {
+        volumeZoomDirection = 0;
+        zoomDriveVelocityTarget = 0.0;
+        zoomDriveBraking = false;
         float clamped = clamp(targetRatio, minimumZoomRatio, maximumZoomRatio);
         targetZoomLog2 = log2(clamped);
         if (Math.abs(targetZoomLog2 - zoomLog2) <= ZOOM_POSITION_EPSILON_STOPS) {
@@ -841,6 +943,34 @@ public final class CameraEngine implements SensorEventListener {
         double dt = (sensorTimestampNs - lastZoomSensorTimestampNs) / 1_000_000_000.0;
         lastZoomSensorTimestampNs = sensorTimestampNs;
         dt = Math.max(1.0 / 240.0, Math.min(0.100, dt));
+
+        if (zoomDriveVelocityTarget != 0.0 || zoomDriveBraking) {
+            zoomVelocityStopsPerSecond = moveToward(
+                    zoomVelocityStopsPerSecond,
+                    zoomDriveVelocityTarget,
+                    ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED * dt);
+            zoomLog2 += zoomVelocityStopsPerSecond * dt;
+            double minimumLog = log2(minimumZoomRatio);
+            double maximumLog = log2(maximumZoomRatio);
+            if (zoomLog2 <= minimumLog || zoomLog2 >= maximumLog) {
+                zoomLog2 = Math.max(minimumLog, Math.min(maximumLog, zoomLog2));
+                zoomVelocityStopsPerSecond = 0.0;
+                if (zoomDriveVelocityTarget == 0.0 ||
+                        (zoomLog2 <= minimumLog && zoomDriveVelocityTarget < 0.0) ||
+                        (zoomLog2 >= maximumLog && zoomDriveVelocityTarget > 0.0)) {
+                    zoomControllerActive = false;
+                }
+            }
+            if (zoomDriveVelocityTarget == 0.0 &&
+                    Math.abs(zoomVelocityStopsPerSecond) <= ZOOM_VELOCITY_EPSILON) {
+                zoomVelocityStopsPerSecond = 0.0;
+                zoomDriveBraking = false;
+                zoomControllerActive = false;
+                targetZoomLog2 = zoomLog2;
+            }
+            submitZoomRequest();
+            return;
+        }
 
         double distance = targetZoomLog2 - zoomLog2;
         double absoluteDistance = Math.abs(distance);
@@ -901,10 +1031,16 @@ public final class CameraEngine implements SensorEventListener {
 
     private void applyControls(CaptureRequest.Builder builder) {
         builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-        builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+        int electronic = requestedStabilizationMode == 2
+                ? CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
+                : CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF;
+        int optical = requestedStabilizationMode == 1
+                ? CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON
+                : CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_OFF;
+        setSafely(builder, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                electronic);
         setSafely(builder, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
-                CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON);
+                optical);
         // The UI calls these controls Sharpness and Noise Reduction. Camera2's
         // public request key for sharpness processing is EDGE_MODE.
         setSafely(builder, CaptureRequest.EDGE_MODE, requestedSharpnessMode);
@@ -916,7 +1052,7 @@ public final class CameraEngine implements SensorEventListener {
         if (autoExposure) {
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
             setSafely(builder, CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                    new Range<>(RECORD_FPS, RECORD_FPS));
+                    new Range<>(requestedRecordFps, requestedRecordFps));
             setSafely(builder, CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,
                     exposureCompensationIndex(requestedExposureCompensationEv));
             setSafely(builder, CaptureRequest.CONTROL_AE_LOCK, aeAfLocked);
@@ -935,10 +1071,11 @@ public final class CameraEngine implements SensorEventListener {
                     requestedIso, isoRange.getLower(), isoRange.getUpper());
             long exposure = exposureRange == null ? requestedExposureNs : clamp(
                     requestedExposureNs, exposureRange.getLower(), exposureRange.getUpper());
-            exposure = Math.min(exposure, FRAME_DURATION_NS - 1_000_000L);
+            long frameDurationNs = requestedFrameDurationNs();
+            exposure = Math.min(exposure, frameDurationNs - 1_000_000L);
             builder.set(CaptureRequest.SENSOR_SENSITIVITY, iso);
             builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure);
-            builder.set(CaptureRequest.SENSOR_FRAME_DURATION, FRAME_DURATION_NS);
+            builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDurationNs);
         }
 
         if (autoFocus) {
@@ -968,8 +1105,11 @@ public final class CameraEngine implements SensorEventListener {
         ContentValues values = new ContentValues();
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
                 .format(new Date());
+        String mode = requestedRecordWidth + "x" + requestedRecordHeight +
+                "_" + requestedRecordFps + "fps_" +
+                (requestedVideoBitRate / 1_000_000) + "Mbps";
         values.put(MediaStore.Video.Media.DISPLAY_NAME,
-                "ZC_" + timestamp + "_UHD30_HEVC.mp4");
+                "ZC_" + timestamp + "_" + mode + "_HEVC.mp4");
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
         values.put(MediaStore.Video.Media.RELATIVE_PATH,
                 Environment.DIRECTORY_MOVIES + "/ZirconCinema");
@@ -988,9 +1128,9 @@ public final class CameraEngine implements SensorEventListener {
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         mediaRecorder.setOutputFile(recordingFileDescriptor.getFileDescriptor());
         mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.HEVC);
-        mediaRecorder.setVideoSize(RECORD_WIDTH, RECORD_HEIGHT);
-        mediaRecorder.setVideoFrameRate(RECORD_FPS);
-        mediaRecorder.setVideoEncodingBitRate(VIDEO_BIT_RATE);
+        mediaRecorder.setVideoSize(requestedRecordWidth, requestedRecordHeight);
+        mediaRecorder.setVideoFrameRate(requestedRecordFps);
+        mediaRecorder.setVideoEncodingBitRate(requestedVideoBitRate);
         mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
         mediaRecorder.setAudioSamplingRate(AUDIO_SAMPLE_RATE);
         mediaRecorder.setAudioChannels(2);
@@ -1136,9 +1276,10 @@ public final class CameraEngine implements SensorEventListener {
         response.put("textureId", textureProducer == null ? null : textureProducer.id());
         response.put("previewWidth", previewSize.getWidth());
         response.put("previewHeight", previewSize.getHeight());
-        response.put("recordWidth", RECORD_WIDTH);
-        response.put("recordHeight", RECORD_HEIGHT);
-        response.put("fps", RECORD_FPS);
+        response.put("recordWidth", requestedRecordWidth);
+        response.put("recordHeight", requestedRecordHeight);
+        response.put("fps", requestedRecordFps);
+        response.put("videoBitRate", requestedVideoBitRate);
         response.put("cameraId", CAMERA_ID);
         response.put("rotationDegrees", previewRotationDegrees());
         response.put("engine", "Camera2");
@@ -1225,7 +1366,7 @@ public final class CameraEngine implements SensorEventListener {
         }
         // Public preview/record streams are 16:9 while the active array is 4:3.
         // Meter against the centered 16:9 sensor crop used by UHD/preview.
-        double targetAspect = (double) RECORD_WIDTH / (double) RECORD_HEIGHT;
+        double targetAspect = (double) PREVIEW_WIDTH / (double) PREVIEW_HEIGHT;
         double activeAspect = (double) active.width() / (double) active.height();
         if (activeAspect < targetAspect) {
             int height = Math.max(1, (int) Math.round(active.width() / targetAspect));

@@ -83,6 +83,16 @@ class NativeCameraEngine {
     });
   }
 
+  Future<void> setVolumeZoomEnabled(bool enabled) {
+    return _methods.invokeMethod<void>('setVolumeZoomEnabled', <String, Object>{
+      'enabled': enabled,
+    });
+  }
+
+  Future<Map<Object?, Object?>> getOrientation() {
+    return _invokeMap('getOrientation', null);
+  }
+
   Future<Map<Object?, Object?>> tapToFocus({
     required double x,
     required double y,

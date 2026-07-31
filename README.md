@@ -4,13 +4,17 @@ Device-specific Flutter cinema-camera application for Xiaomi Redmi Note 13 Pro+ 
 
 ## Current build
 
-- Release archive: `ZirconCinema-0.8.0-EXTRACT-FIRST.zip` (kept at the workspace root; upload it as a GitHub Release asset rather than committing it to source)
-- Version: `0.8.0+10`
+- Release archive: `ZirconCinema-0.9.0-EXTRACT-FIRST.zip` (keep release assets outside Git history)
+- Version: `0.9.0+11`
 - Package: `ai.arena.zirconcinema.ui`
 - ABI: `arm64-v8a`
-- APK SHA-256: `aef412a11822b53098c0ff60cce87fae971b702f494d2c4a5a7b29308e2f4127`
+- APK SHA-256: `790209bccf98bceaf7c6acdd8a946827fa877bda94a1bb146ad82eae8c8dae3a`
 
 The package and personal-test certificate are unchanged, so this APK can update v0.1/v0.2/v0.3.0. It is release-optimized but signed with an Android debug certificate; replace that certificate before production distribution.
+
+### v0.9 recording and field-control milestone
+
+Added UHD30, FHD30 and 4:3 1440p30 direct modes; requested 20/50/80/100 Mb/s bitrates; Off/OIS/EIS selection; fixed orientation refresh; minimal AUTO HUD; and volume-key zoom with tap steps, hold-to-drive and smooth release.
 
 ### v0.8 smooth zoom milestone
 
@@ -146,7 +150,7 @@ Install or update:
 
 ```bash
 # Extract the GitHub Release ZIP first, then:
-adb install -r ZirconCinema-0.8.0-smooth-zoom-arm64.apk
+adb install -r ZirconCinema-0.9.0-recording-controls-arm64.apk
 ```
 
 See the [UI/UX specification](docs/ui_ux_spec.md), [concept mockup](docs/zircon_camera_ui_mockup.png), [third-party research](docs/third_party_research.md), and [changelog](CHANGELOG.md).

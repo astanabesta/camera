@@ -34,6 +34,11 @@ class _ZirconCinemaAppState extends State<ZirconCinemaApp>
   }
 
   @override
+  void didChangeMetrics() {
+    unawaited(_controller.refreshPreviewOrientation());
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:

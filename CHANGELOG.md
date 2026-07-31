@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0+11 — Recording modes, stabilization and volume zoom
+
+- Added volume-button zoom on the Camera page: tap nudges ¹⁄₁₂ stop; hold drives continuous zoom; release decelerates smoothly.
+- Fixed preview rotation refresh after icon-driven portrait/landscape changes and Android display metric changes.
+- Added direct HEVC/AAC recording modes: UHD 3840×2160/30, FHD 1920×1080/30 and 4:3 1920×1440/30.
+- Added requested bitrate presets: Low 20, Medium 50, High 80 and Max 100 Mb/s.
+- Added functional Off/Optical/Electronic Camera2 stabilization requests with returned OIS/EIS result status.
+- Master AUTO now presents the selected minimal HUD: Lens, FPS, Format, Timecode, Mode and Record only; MANUAL/MIXED restores all controls.
+- Recording configuration is re-applied immediately before recording so a pending Settings change cannot start with stale native values.
+- Kept 1080p60 and 4080×3060 encoded open-gate excluded because the public direct Camera2/encoder tables do not advertise those exact modes.
+
 ## 0.8.0+10 — Capture-timed smooth single-lens zoom
 
 - Added native 1×–10× Camera2 `CONTROL_ZOOM_RATIO` zoom during preview and recording without session recreation.

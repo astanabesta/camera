@@ -29,6 +29,8 @@ class VerticalControlPanel extends StatelessWidget {
           _Header(controller: controller, control: control),
           if (_supportsAuto(control))
             _AutoManualSwitch(controller: controller, control: control),
+          if (control == CameraControl.zoom)
+            _ZoomSpeedControl(controller: controller),
           Expanded(child: _body(control)),
         ],
       ),
@@ -120,7 +122,7 @@ class VerticalControlPanel extends StatelessWidget {
       math.log(controller.maximumZoomRatio) / math.ln2,
       180,
       1 / 60,
-      'LOG₂ RAMP • ACT ${_zoom(controller.actualZoomRatio ?? 1.0)}',
+      '${controller.zoomSpeed.label.toUpperCase()} • LOG₂ • ACT ${_zoom(controller.actualZoomRatio ?? 1.0)}',
       <_Preset>[
         const _Preset(0, '1×'),
         const _Preset(1, '2×'),
@@ -426,6 +428,38 @@ bool _supportsAuto(CameraControl control) =>
     control == CameraControl.iso ||
     control == CameraControl.focus ||
     control == CameraControl.whiteBalance;
+
+class _ZoomSpeedControl extends StatelessWidget {
+  const _ZoomSpeedControl({required this.controller});
+  final CameraUiController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: ZirconColors.strokeSoft)),
+      ),
+      child: Row(
+        children: ZoomSpeed.values
+            .map(
+              (ZoomSpeed speed) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: _ModeButton(
+                    label: speed.label.toUpperCase(),
+                    selected: controller.zoomSpeed == speed,
+                    onTap: () => controller.setZoomSpeed(speed),
+                  ),
+                ),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+}
 
 class _AutoManualSwitch extends StatelessWidget {
   const _AutoManualSwitch({required this.controller, required this.control});

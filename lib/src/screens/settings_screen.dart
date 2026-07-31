@@ -295,6 +295,22 @@ List<Widget> _cameraRows(CameraUiController c) => <Widget>[
     value: c.actualStabilizationLabel,
     chevron: false,
   ),
+  _ChoiceRow<ZoomSpeed>(
+    title: 'Zoom Speed',
+    value: c.zoomSpeed,
+    values: ZoomSpeed.values,
+    label: (ZoomSpeed value) => value.label,
+    onChanged: c.setZoomSpeed,
+  ),
+  _ValueRow(
+    title: 'Zoom Speed Use',
+    value: switch (c.zoomSpeed) {
+      ZoomSpeed.slow => 'Cinematic push-ins',
+      ZoomSpeed.medium => 'General shooting',
+      ZoomSpeed.fast => 'Quick smooth framing',
+    },
+    chevron: false,
+  ),
   const _ValueRow(title: 'Main Camera', value: '6.14 mm  f/1.65'),
 ];
 

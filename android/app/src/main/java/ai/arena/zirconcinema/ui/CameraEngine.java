@@ -76,8 +76,10 @@ public final class CameraEngine implements SensorEventListener {
     private static final double LOG_2 = Math.log(2.0);
     // Zircon-specific starting values. Final tuning is based on measured
     // capture-result cadence, not assumed 30 fps timer ticks.
-    private static final double ZOOM_MAX_RATE_STOPS_PER_SECOND = 1.35;
-    private static final double ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED = 4.0;
+    // Slow is intentionally the original v0.9-v0.12 zoom tuning.
+    private static final double DEFAULT_ZOOM_TARGET_RATE_STOPS_PER_SECOND = 1.35;
+    private static final double DEFAULT_ZOOM_HOLD_RATE_STOPS_PER_SECOND = 0.70;
+    private static final double DEFAULT_ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED = 4.0;
     private static final double ZOOM_POSITION_EPSILON_STOPS = 0.0005;
     private static final double ZOOM_VELOCITY_EPSILON = 0.005;
 
@@ -154,6 +156,12 @@ public final class CameraEngine implements SensorEventListener {
     private long volumeZoomKeyDownMs;
     private double zoomDriveVelocityTarget;
     private boolean zoomDriveBraking;
+    private double zoomTargetRateStopsPerSecond =
+            DEFAULT_ZOOM_TARGET_RATE_STOPS_PER_SECOND;
+    private double zoomHoldRateStopsPerSecond =
+            DEFAULT_ZOOM_HOLD_RATE_STOPS_PER_SECOND;
+    private double zoomAccelerationStopsPerSecondSquared =
+            DEFAULT_ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED;
     private int captureResultCounter;
 
     public CameraEngine(Activity activity, TextureRegistry textureRegistry,
@@ -258,6 +266,7 @@ public final class CameraEngine implements SensorEventListener {
                         values.get("sharpnessMode"), requestedSharpnessMode);
                 requestedNoiseReductionMode = intValue(
                         values.get("noiseReductionMode"), requestedNoiseReductionMode);
+                updateZoomSpeedConfiguration(values);
                 Object zoom = values.get("zoomRatio");
                 if (zoom instanceof Number) {
                     setZoomTargetInternal(((Number) zoom).floatValue());
@@ -279,6 +288,12 @@ public final class CameraEngine implements SensorEventListener {
                 response.put("recordFps", requestedRecordFps);
                 response.put("videoBitRate", requestedVideoBitRate);
                 response.put("stabilizationModeRequested", requestedStabilizationMode);
+                response.put("zoomTargetRateStopsPerSecond",
+                        zoomTargetRateStopsPerSecond);
+                response.put("zoomHoldRateStopsPerSecond",
+                        zoomHoldRateStopsPerSecond);
+                response.put("zoomAccelerationStopsPerSecondSquared",
+                        zoomAccelerationStopsPerSecondSquared);
                 replySuccess(result, response);
             } catch (Throwable error) {
                 replyError(result, "CONTROL_FAILED", "Unable to apply camera controls", error);
@@ -308,6 +323,18 @@ public final class CameraEngine implements SensorEventListener {
         return Math.max(1L, 1_000_000_000L / Math.max(1, requestedRecordFps));
     }
 
+    private void updateZoomSpeedConfiguration(Map<String, Object> values) {
+        zoomTargetRateStopsPerSecond = clamp(
+                floatValue(values.get("zoomTargetRateStopsPerSecond"),
+                        (float) zoomTargetRateStopsPerSecond), 0.10f, 5.0f);
+        zoomHoldRateStopsPerSecond = clamp(
+                floatValue(values.get("zoomHoldRateStopsPerSecond"),
+                        (float) zoomHoldRateStopsPerSecond), 0.10f, 5.0f);
+        zoomAccelerationStopsPerSecondSquared = clamp(
+                floatValue(values.get("zoomAccelerationStopsPerSecondSquared"),
+                        (float) zoomAccelerationStopsPerSecondSquared), 0.25f, 20.0f);
+    }
+
     /**
      * Latest-target-wins zoom command. This method never submits a Camera2
      * request directly; the capture callback advances the ramp at actual frame
@@ -320,6 +347,7 @@ public final class CameraEngine implements SensorEventListener {
         }
         cameraHandler.post(() -> {
             try {
+                updateZoomSpeedConfiguration(values);
                 float target = floatValue(values.get("zoomRatio"), actualZoomRatio);
                 setZoomTargetInternal(target);
                 Map<String, Object> response = new HashMap<>();
@@ -328,6 +356,10 @@ public final class CameraEngine implements SensorEventListener {
                 response.put("actualZoomRatio", actualZoomRatio);
                 response.put("minimumZoomRatio", minimumZoomRatio);
                 response.put("maximumZoomRatio", maximumZoomRatio);
+                response.put("zoomTargetRateStopsPerSecond",
+                        zoomTargetRateStopsPerSecond);
+                response.put("zoomAccelerationStopsPerSecondSquared",
+                        zoomAccelerationStopsPerSecondSquared);
                 replySuccess(result, response);
             } catch (Throwable error) {
                 replyError(result, "ZOOM_TARGET_FAILED",
@@ -351,7 +383,7 @@ public final class CameraEngine implements SensorEventListener {
                 if (volumeZoomDirection == direction) return;
                 volumeZoomDirection = direction;
                 volumeZoomKeyDownMs = SystemClock.elapsedRealtime();
-                zoomDriveVelocityTarget = direction * 0.70;
+                zoomDriveVelocityTarget = direction * zoomHoldRateStopsPerSecond;
                 zoomDriveBraking = false;
                 zoomControllerActive = true;
             } else if (volumeZoomDirection == direction) {
@@ -818,6 +850,10 @@ public final class CameraEngine implements SensorEventListener {
                     event.put("zoomRatio", actualZoomRatio);
                     event.put("zoomTargetRatio", zoomRatioFromLog(targetZoomLog2));
                     event.put("zoomVelocityStopsPerSecond", zoomVelocityStopsPerSecond);
+                    event.put("zoomTargetRateStopsPerSecond",
+                            zoomTargetRateStopsPerSecond);
+                    event.put("zoomHoldRateStopsPerSecond",
+                            zoomHoldRateStopsPerSecond);
                     if (captureIntervalEmaNs > 0.0) {
                         event.put("measuredPreviewFps", 1_000_000_000.0 / captureIntervalEmaNs);
                         event.put("captureIntervalEmaNs", captureIntervalEmaNs);
@@ -948,7 +984,7 @@ public final class CameraEngine implements SensorEventListener {
             zoomVelocityStopsPerSecond = moveToward(
                     zoomVelocityStopsPerSecond,
                     zoomDriveVelocityTarget,
-                    ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED * dt);
+                    zoomAccelerationStopsPerSecondSquared * dt);
             zoomLog2 += zoomVelocityStopsPerSecond * dt;
             double minimumLog = log2(minimumZoomRatio);
             double maximumLog = log2(maximumZoomRatio);
@@ -987,13 +1023,13 @@ public final class CameraEngine implements SensorEventListener {
         // Braking speed derived from v² = 2*a*d. Far from the target this is
         // capped at the phone-tuned maximum; close to it, velocity tapers down.
         double brakingSpeed = Math.sqrt(
-                2.0 * ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED * absoluteDistance);
+                2.0 * zoomAccelerationStopsPerSecondSquared * absoluteDistance);
         double desiredVelocity = direction * Math.min(
-                ZOOM_MAX_RATE_STOPS_PER_SECOND, brakingSpeed);
+                zoomTargetRateStopsPerSecond, brakingSpeed);
         zoomVelocityStopsPerSecond = moveToward(
                 zoomVelocityStopsPerSecond,
                 desiredVelocity,
-                ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED * dt);
+                zoomAccelerationStopsPerSecondSquared * dt);
 
         double step = zoomVelocityStopsPerSecond * dt;
         if (Math.signum(step) == direction && Math.abs(step) >= absoluteDistance) {

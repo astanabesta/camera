@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0+15 — Adjustable smooth zoom speed
+
+- Added Slow, Medium and Fast zoom-speed presets in Camera Settings and the active zoom panel.
+- Slow preserves the exact v0.9-v0.12 cinematic zoom tuning: target 1.35 stops/s, hold 0.70 stops/s and acceleration 4.0 stops/s².
+- Medium increases target/hold speed to 2.10/1.15 stops/s with 6.5 stops/s² acceleration for general shooting.
+- Fast increases target/hold speed to 3.20/1.80 stops/s with 10.0 stops/s² acceleration for quick but still smoothed framing.
+- All three modes keep capture-timestamp pacing, log₂ interpolation, latest-target-wins coalescing and acceleration/braking limits.
+- The selected speed affects presets, ruler targets, pinch targets and volume-button holds.
+
 ## 0.12.0+14 — Specification-aligned dark lens icon
 
 - Replaced the launcher with the newly supplied full-square dark lens artwork.

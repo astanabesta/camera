@@ -85,6 +85,15 @@ void main() {
     expect(controller.fps, '30');
     expect(controller.codec, 'HEVC 100 Mb/s');
     expect(controller.stabilizationMode, StabilizationMode.electronic);
+    expect(controller.zoomSpeed, ZoomSpeed.slow);
+    expect(ZoomSpeed.slow.targetRateStopsPerSecond, 1.35);
+    expect(ZoomSpeed.slow.holdRateStopsPerSecond, .70);
+    controller.setZoomSpeed(ZoomSpeed.medium);
+    expect(controller.zoomSpeed, ZoomSpeed.medium);
+    expect(
+      ZoomSpeed.fast.targetRateStopsPerSecond,
+      greaterThan(ZoomSpeed.medium.targetRateStopsPerSecond),
+    );
     controller.dispose();
   });
 
@@ -146,6 +155,19 @@ void main() {
     expect(find.textContaining('Max 100 Mb/s'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
+    await tester.tap(find.text('Camera'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Zoom Speed'),
+      120,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Zoom Speed'), findsOneWidget);
+    expect(find.text('Slow'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('Fast'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.tap(find.text('Monitor'));
     await tester.pumpAndSettle();
     expect(find.text('Frame Guides'), findsOneWidget);
@@ -162,7 +184,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('ZOOM').first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('LOG₂ RAMP'), findsOneWidget);
+    expect(find.textContaining('SLOW • LOG₂'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.byType(RecordButton));
     await tester.pump(const Duration(milliseconds: 150));

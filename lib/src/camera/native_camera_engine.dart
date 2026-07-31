@@ -77,9 +77,16 @@ class NativeCameraEngine {
     await _methods.invokeMethod<void>('setControls', controls);
   }
 
-  Future<Map<Object?, Object?>> setZoomTarget(double zoomRatio) {
+  Future<Map<Object?, Object?>> setZoomTarget(
+    double zoomRatio, {
+    required double targetRateStopsPerSecond,
+    required double accelerationStopsPerSecondSquared,
+  }) {
     return _invokeMap('setZoomTarget', <String, Object>{
       'zoomRatio': zoomRatio,
+      'zoomTargetRateStopsPerSecond': targetRateStopsPerSecond,
+      'zoomAccelerationStopsPerSecondSquared':
+          accelerationStopsPerSecondSquared,
     });
   }
 

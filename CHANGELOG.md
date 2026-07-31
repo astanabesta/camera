@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0+14 — Specification-aligned dark lens icon
+
+- Replaced the launcher with the newly supplied full-square dark lens artwork.
+- Built a 108×108 dp adaptive foreground/background design with the complete composition constrained to the central 72×72 dp safe zone.
+- Generated mdpi, hdpi, xhdpi, xxhdpi and xxxhdpi legacy square and circular assets.
+- Added a full-square 512×512 32-bit Google Play PNG under the 1024 KB limit.
+- Camera engine, recorder, processing, smooth zoom and v0.9 functionality are unchanged.
+
 ## 0.11.0+13 — Dark lens launcher artwork
 
 - Replaced the launcher with the newly supplied black camera-lens artwork and red recording indicator.

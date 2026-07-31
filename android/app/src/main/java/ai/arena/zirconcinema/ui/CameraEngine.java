@@ -1,0 +1,1407 @@
+package ai.arena.zirconcinema.ui;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Rect;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.CaptureResult;
+import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.MeteringRectangle;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.media.MediaRecorder;
+import android.net.Uri;
+import android.os.BatteryManager;
+import android.os.Build;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.ParcelFileDescriptor;
+import android.os.StatFs;
+import android.os.SystemClock;
+import android.provider.MediaStore;
+import android.util.Range;
+import android.util.Rational;
+import android.util.Size;
+import android.view.Surface;
+
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.flutter.plugin.common.MethodChannel;
+import io.flutter.view.TextureRegistry;
+
+/**
+ * Device-specific Camera2 engine for Xiaomi 23090RA98I camera ID 0.
+ *
+ * This class is an original implementation. MotionCam's GPL repository was
+ * reviewed only for high-level architecture (native camera state separation,
+ * explicit metadata, and bounded RAW buffers); no MotionCam source is copied.
+ */
+public final class CameraEngine implements SensorEventListener {
+    public interface EventEmitter {
+        void emit(Map<String, Object> event);
+    }
+
+    private static final String CAMERA_ID = "0";
+    private static final int PREVIEW_WIDTH = 1920;
+    private static final int PREVIEW_HEIGHT = 1080;
+    private static final int RECORD_WIDTH = 3840;
+    private static final int RECORD_HEIGHT = 2160;
+    private static final int RECORD_FPS = 30;
+    private static final int VIDEO_BIT_RATE = 80_000_000;
+    private static final int AUDIO_BIT_RATE = 192_000;
+    private static final int AUDIO_SAMPLE_RATE = 48_000;
+    private static final long FRAME_DURATION_NS = 33_333_333L;
+    private static final double LOG_2 = Math.log(2.0);
+    // Zircon-specific starting values. Final tuning is based on measured
+    // capture-result cadence, not assumed 30 fps timer ticks.
+    private static final double ZOOM_MAX_RATE_STOPS_PER_SECOND = 1.35;
+    private static final double ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED = 4.0;
+    private static final double ZOOM_POSITION_EPSILON_STOPS = 0.0005;
+    private static final double ZOOM_VELOCITY_EPSILON = 0.005;
+
+    private final Activity activity;
+    private final TextureRegistry textureRegistry;
+    private final EventEmitter eventEmitter;
+    private final CameraManager cameraManager;
+    private final SensorManager sensorManager;
+    private final Sensor levelSensor;
+    private final AtomicBoolean disposed = new AtomicBoolean(false);
+    private long lastLevelEventMs;
+
+    private HandlerThread cameraThread;
+    private Handler cameraHandler;
+    private TextureRegistry.SurfaceProducer textureProducer;
+    private Surface previewSurface;
+    private Size previewSize = new Size(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    private CameraCharacteristics characteristics;
+    private CameraDevice cameraDevice;
+    private CameraCaptureSession captureSession;
+    private CaptureRequest.Builder repeatingBuilder;
+
+    private MediaRecorder mediaRecorder;
+    private Surface recorderSurface;
+    private ParcelFileDescriptor recordingFileDescriptor;
+    private Uri recordingUri;
+    private Uri lastClipUri;
+    private MethodChannel.Result pendingInitializeResult;
+    private MethodChannel.Result pendingRecordStartResult;
+
+    private boolean initialized;
+    private boolean opening;
+    private boolean recording;
+    private boolean autoExposure = true;
+    private boolean autoFocus = true;
+    private int requestedIso = 50;
+    private long requestedExposureNs = 16_666_667L;
+    private float requestedFocusDistance = 0.0f;
+    private float requestedExposureCompensationEv = 0.0f;
+    private String requestedWhiteBalance = "AUTO";
+    private int requestedSharpnessMode = CaptureRequest.EDGE_MODE_OFF;
+    private int requestedNoiseReductionMode = CaptureRequest.NOISE_REDUCTION_MODE_MINIMAL;
+    private MeteringRectangle[] requestedAfRegions;
+    private MeteringRectangle[] requestedAeRegions;
+    private boolean tapAfActive;
+    private boolean aeAfLocked;
+    private float focusPointX = 0.5f;
+    private float focusPointY = 0.5f;
+
+    // Single-lens smooth zoom state. All fields are owned by cameraHandler.
+    // Touch/UI events only update targetZoomLog2. Capture results advance the
+    // ramp once per actual camera frame, so touch-event jitter never controls
+    // Camera2 request pacing.
+    private float minimumZoomRatio = 1.0f;
+    private float maximumZoomRatio = 10.0f;
+    private double zoomLog2 = 0.0;
+    private double targetZoomLog2 = 0.0;
+    private double zoomVelocityStopsPerSecond = 0.0;
+    private float actualZoomRatio = 1.0f;
+    private boolean zoomControllerActive;
+    private long lastZoomSensorTimestampNs;
+    private long lastSensorTimestampNs;
+    private double captureIntervalEmaNs;
+    private long lastCaptureFrameNumber = -1L;
+    private long captureFrameGaps;
+    private int captureResultCounter;
+
+    public CameraEngine(Activity activity, TextureRegistry textureRegistry,
+                        EventEmitter eventEmitter) {
+        this.activity = activity;
+        this.textureRegistry = textureRegistry;
+        this.eventEmitter = eventEmitter;
+        this.cameraManager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+        this.sensorManager = (SensorManager) activity.getSystemService(Context.SENSOR_SERVICE);
+        Sensor gravity = sensorManager == null ? null :
+                sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
+        this.levelSensor = gravity != null ? gravity :
+                (sensorManager == null ? null :
+                        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER));
+    }
+
+    public void initialize(MethodChannel.Result result) {
+        if (disposed.get()) {
+            replyError(result, "DISPOSED", "Camera engine is disposed", null);
+            return;
+        }
+        if (!isTargetDevice()) {
+            replyError(result, "UNSUPPORTED_DEVICE",
+                    "Zircon Cinema camera engine only supports Xiaomi 23090RA98I (zircon). " +
+                            "Detected " + Build.MANUFACTURER + " " + Build.MODEL + " / " + Build.DEVICE,
+                    null);
+            return;
+        }
+        if (initialized && textureProducer != null) {
+            pendingInitializeResult = result;
+            startThread();
+            cameraHandler.post(() -> {
+                if (captureSession != null && cameraDevice != null) {
+                    completeInitialization();
+                } else if (cameraDevice != null) {
+                    createPreviewSession();
+                } else {
+                    resume();
+                }
+            });
+            return;
+        }
+        pendingInitializeResult = result;
+        try {
+            // MethodChannel handlers run on Android's platform thread. Flutter
+            // texture resources must be created here, never on Camera2's worker.
+            ensurePreviewProducerOnPlatformThread();
+        } catch (Throwable error) {
+            failInitialization(
+                    detailedMessage("Flutter preview surface creation failed", error), error);
+            return;
+        }
+
+        startThread();
+        cameraHandler.post(() -> {
+            try {
+                characteristics = cameraManager.getCameraCharacteristics(CAMERA_ID);
+            } catch (Throwable error) {
+                failInitialization(
+                        detailedMessage("Camera2 characteristics query failed for camera 0", error),
+                        error);
+                return;
+            }
+
+            try {
+                configureZoomRange();
+                initialized = true;
+                startLevelSensor();
+                emitState("opening", null);
+                openCamera();
+            } catch (Throwable error) {
+                failInitialization(
+                        detailedMessage("Camera2 open request failed for camera 0", error), error);
+            }
+        });
+    }
+
+    public void updateControls(Map<String, Object> values, MethodChannel.Result result) {
+        if (!initialized) {
+            replyError(result, "NOT_READY", "Camera is not initialized", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            try {
+                autoExposure = booleanValue(values.get("autoExposure"), autoExposure);
+                autoFocus = booleanValue(values.get("autoFocus"), autoFocus);
+                if (!autoExposure) aeAfLocked = false;
+                if (!autoFocus) {
+                    tapAfActive = false;
+                    requestedAfRegions = null;
+                }
+                requestedIso = intValue(values.get("iso"), requestedIso);
+                requestedExposureNs = longValue(values.get("exposureTimeNs"), requestedExposureNs);
+                requestedFocusDistance = floatValue(
+                        values.get("focusDistanceDiopters"), requestedFocusDistance);
+                requestedExposureCompensationEv = floatValue(
+                        values.get("exposureCompensationEv"),
+                        requestedExposureCompensationEv);
+                Object wb = values.get("whiteBalance");
+                if (wb != null) requestedWhiteBalance = String.valueOf(wb);
+                requestedSharpnessMode = intValue(
+                        values.get("sharpnessMode"), requestedSharpnessMode);
+                requestedNoiseReductionMode = intValue(
+                        values.get("noiseReductionMode"), requestedNoiseReductionMode);
+                Object zoom = values.get("zoomRatio");
+                if (zoom instanceof Number) {
+                    setZoomTargetInternal(((Number) zoom).floatValue());
+                }
+                updateRepeatingRequest();
+                Map<String, Object> response = new HashMap<>();
+                response.put("applied", true);
+                response.put("tintSupported", false);
+                response.put("autoExposure", autoExposure);
+                response.put("autoFocus", autoFocus);
+                response.put("sharpnessModeRequested", requestedSharpnessMode);
+                response.put("noiseReductionModeRequested", requestedNoiseReductionMode);
+                replySuccess(result, response);
+            } catch (Throwable error) {
+                replyError(result, "CONTROL_FAILED", "Unable to apply camera controls", error);
+            }
+        });
+    }
+
+    /**
+     * Latest-target-wins zoom command. This method never submits a Camera2
+     * request directly; the capture callback advances the ramp at actual frame
+     * cadence and keeps preview/recording in the existing capture session.
+     */
+    public void setZoomTarget(Map<String, Object> values, MethodChannel.Result result) {
+        if (!initialized || cameraHandler == null) {
+            replyError(result, "NOT_READY", "Camera is not initialized", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            try {
+                float target = floatValue(values.get("zoomRatio"), actualZoomRatio);
+                setZoomTargetInternal(target);
+                Map<String, Object> response = new HashMap<>();
+                response.put("accepted", true);
+                response.put("targetZoomRatio", zoomRatioFromLog(targetZoomLog2));
+                response.put("actualZoomRatio", actualZoomRatio);
+                response.put("minimumZoomRatio", minimumZoomRatio);
+                response.put("maximumZoomRatio", maximumZoomRatio);
+                replySuccess(result, response);
+            } catch (Throwable error) {
+                replyError(result, "ZOOM_TARGET_FAILED",
+                        "Unable to set smooth zoom target", error);
+            }
+        });
+    }
+
+    /**
+     * Applies real Camera2 AF/AE metering regions in displayed-preview
+     * coordinates. x and y are normalized after Flutter rotation.
+     */
+    public void tapToFocus(Map<String, Object> values, MethodChannel.Result result) {
+        if (!initialized || cameraHandler == null) {
+            replyError(result, "NOT_READY", "Camera is not initialized", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            try {
+                if (captureSession == null || repeatingBuilder == null) {
+                    throw new IllegalStateException("Camera capture session is unavailable");
+                }
+                focusPointX = clamp01(floatValue(values.get("x"), 0.5f));
+                focusPointY = clamp01(floatValue(values.get("y"), 0.5f));
+                boolean lockAfterFocus = booleanValue(values.get("lock"), false);
+                Rect crop = meteringCropRegion();
+                requestedAfRegions = supportedRegion(
+                        CameraCharacteristics.CONTROL_MAX_REGIONS_AF,
+                        meteringRectangle(crop, focusPointX, focusPointY, 0.09f));
+                requestedAeRegions = supportedRegion(
+                        CameraCharacteristics.CONTROL_MAX_REGIONS_AE,
+                        meteringRectangle(crop, focusPointX, focusPointY, 0.14f));
+                autoFocus = true;
+                tapAfActive = true;
+                // Meter first. A long press locks AE only after the new point
+                // has had time to settle; locking before the trigger would
+                // freeze exposure at the previous region.
+                aeAfLocked = false;
+
+                applyControls(repeatingBuilder);
+                setSafely(repeatingBuilder, CaptureRequest.CONTROL_AF_TRIGGER,
+                        CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+                captureSession.capture(
+                        repeatingBuilder.build(), captureCallback, cameraHandler);
+
+                setSafely(repeatingBuilder, CaptureRequest.CONTROL_AF_TRIGGER,
+                        CaptureRequest.CONTROL_AF_TRIGGER_START);
+                setSafely(repeatingBuilder, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
+                captureSession.capture(
+                        repeatingBuilder.build(), captureCallback, cameraHandler);
+
+                setSafely(repeatingBuilder, CaptureRequest.CONTROL_AF_TRIGGER,
+                        CaptureRequest.CONTROL_AF_TRIGGER_IDLE);
+                setSafely(repeatingBuilder, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE);
+                captureSession.setRepeatingRequest(
+                        repeatingBuilder.build(), captureCallback, cameraHandler);
+                if (lockAfterFocus) {
+                    cameraHandler.postDelayed(() -> {
+                        if (!tapAfActive || captureSession == null || repeatingBuilder == null) {
+                            return;
+                        }
+                        try {
+                            aeAfLocked = true;
+                            updateRepeatingRequest();
+                        } catch (Throwable error) {
+                            emitError("LOCK_FAILED", "Unable to lock metered AE/AF point", error);
+                        }
+                    }, 650L);
+                }
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("accepted", true);
+                response.put("x", focusPointX);
+                response.put("y", focusPointY);
+                response.put("locked", lockAfterFocus);
+                response.put("afRegionSupported", requestedAfRegions != null);
+                response.put("aeRegionSupported", requestedAeRegions != null);
+                replySuccess(result, response);
+            } catch (Throwable error) {
+                replyError(result, "TAP_FOCUS_FAILED",
+                        "Unable to apply Camera2 focus/metering point", error);
+            }
+        });
+    }
+
+    public void setAeAfLock(boolean locked, MethodChannel.Result result) {
+        if (!initialized || cameraHandler == null) {
+            replyError(result, "NOT_READY", "Camera is not initialized", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            try {
+                aeAfLocked = locked;
+                if (!locked) {
+                    tapAfActive = false;
+                    requestedAfRegions = null;
+                    requestedAeRegions = null;
+                }
+                updateRepeatingRequest();
+                Map<String, Object> response = new HashMap<>();
+                response.put("locked", aeAfLocked);
+                replySuccess(result, response);
+            } catch (Throwable error) {
+                replyError(result, "LOCK_FAILED", "Unable to change AE/AF lock", error);
+            }
+        });
+    }
+
+    public void startRecording(MethodChannel.Result result) {
+        if (!initialized || cameraDevice == null) {
+            replyError(result, "NOT_READY", "Camera is not ready", null);
+            return;
+        }
+        if (recording || pendingRecordStartResult != null) {
+            replyError(result, "ALREADY_RECORDING", "Recording is already active or starting", null);
+            return;
+        }
+        pendingRecordStartResult = result;
+        cameraHandler.post(() -> {
+            try {
+                emitState("preparingRecording", null);
+                closeSession();
+                prepareRecorder();
+                createRecordingSession();
+            } catch (Throwable error) {
+                failRecordStart("Unable to prepare UHD HEVC recorder", error);
+            }
+        });
+    }
+
+    public void stopRecording(MethodChannel.Result result) {
+        if (!recording && pendingRecordStartResult == null) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("stopped", false);
+            response.put("uri", lastClipUri == null ? null : lastClipUri.toString());
+            replySuccess(result, response);
+            return;
+        }
+        cameraHandler.post(() -> stopRecordingInternal(result, true));
+    }
+
+    public void pause() {
+        stopLevelSensor();
+        if (!initialized || cameraHandler == null) return;
+        cameraHandler.post(() -> {
+            if (recording || pendingRecordStartResult != null) {
+                stopRecordingInternal(null, false);
+            }
+            closeCameraOnly();
+            emitState("paused", null);
+        });
+    }
+
+    public void resume() {
+        if (!initialized || disposed.get()) return;
+        startLevelSensor();
+        startThread();
+        cameraHandler.post(() -> {
+            if (cameraDevice == null && !opening) {
+                try {
+                    emitState("opening", null);
+                    openCamera();
+                } catch (Throwable error) {
+                    emitError("RESUME_FAILED", "Unable to reopen camera", error);
+                }
+            }
+        });
+    }
+
+    public Uri getLastClipUri() {
+        return lastClipUri;
+    }
+
+    public void dispose() {
+        if (!disposed.compareAndSet(false, true)) return;
+        stopLevelSensor();
+        if (cameraHandler != null) {
+            cameraHandler.post(() -> {
+                if (recording || pendingRecordStartResult != null) {
+                    stopRecordingInternal(null, false);
+                }
+                closeCameraOnly();
+                releasePreviewSurface();
+            });
+        } else {
+            releasePreviewSurface();
+        }
+        stopThread();
+    }
+
+    private void startLevelSensor() {
+        if (sensorManager == null || levelSensor == null || disposed.get()) return;
+        sensorManager.unregisterListener(this);
+        sensorManager.registerListener(this, levelSensor, SensorManager.SENSOR_DELAY_GAME);
+    }
+
+    private void stopLevelSensor() {
+        if (sensorManager != null) sensorManager.unregisterListener(this);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event == null || event.values.length < 3 || disposed.get()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastLevelEventMs < 100L) return;
+        lastLevelEventMs = now;
+        float x = event.values[0];
+        float y = event.values[1];
+        float z = event.values[2];
+        float screenX;
+        float screenY;
+        switch (activity.getDisplay().getRotation()) {
+            case Surface.ROTATION_90 -> { screenX = -y; screenY = x; }
+            case Surface.ROTATION_180 -> { screenX = -x; screenY = -y; }
+            case Surface.ROTATION_270 -> { screenX = y; screenY = -x; }
+            default -> { screenX = x; screenY = y; }
+        }
+        Map<String, Object> level = new HashMap<>();
+        level.put("type", "level");
+        level.put("rollDegrees", Math.toDegrees(Math.atan2(screenX, screenY)));
+        level.put("pitchDegrees", Math.toDegrees(Math.atan2(
+                z, Math.sqrt(screenX * screenX + screenY * screenY))));
+        emit(level);
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
+
+    private void startThread() {
+        if (cameraThread != null && cameraThread.isAlive()) return;
+        cameraThread = new HandlerThread("ZirconCamera2");
+        cameraThread.start();
+        cameraHandler = new Handler(cameraThread.getLooper());
+    }
+
+    private void stopThread() {
+        HandlerThread thread = cameraThread;
+        cameraThread = null;
+        cameraHandler = null;
+        if (thread != null) thread.quitSafely();
+    }
+
+    private void ensurePreviewProducerOnPlatformThread() {
+        if (textureProducer != null) return;
+        textureProducer = textureRegistry.createSurfaceProducer();
+        textureProducer.setSize(previewSize.getWidth(), previewSize.getHeight());
+        textureProducer.setCallback(new TextureRegistry.SurfaceProducer.Callback() {
+            @Override
+            public void onSurfaceAvailable() {
+                previewSurface = null;
+                if (initialized && !disposed.get()) resume();
+            }
+
+            @Override
+            public void onSurfaceCleanup() {
+                Handler handler = cameraHandler;
+                if (handler != null) {
+                    handler.post(() -> {
+                        closeCameraOnly();
+                        previewSurface = null;
+                    });
+                } else {
+                    previewSurface = null;
+                }
+            }
+        });
+    }
+
+    private Surface obtainPreviewSurface() {
+        if (textureProducer == null) {
+            throw new IllegalStateException("Flutter SurfaceProducer is null");
+        }
+        Surface surface = textureProducer.getSurface();
+        if (surface == null || !surface.isValid()) {
+            throw new IllegalStateException("Flutter preview Surface is unavailable or invalid");
+        }
+        previewSurface = surface;
+        return surface;
+    }
+
+    @SuppressLint("MissingPermission")
+    private void openCamera() throws CameraAccessException {
+        if (opening || cameraDevice != null) return;
+        opening = true;
+        cameraManager.openCamera(CAMERA_ID, cameraStateCallback, cameraHandler);
+    }
+
+    private final CameraDevice.StateCallback cameraStateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(CameraDevice camera) {
+            opening = false;
+            cameraDevice = camera;
+            createPreviewSession();
+        }
+
+        @Override
+        public void onDisconnected(CameraDevice camera) {
+            opening = false;
+            camera.close();
+            cameraDevice = null;
+            emitError("CAMERA_DISCONNECTED", "Camera 0 disconnected", null);
+        }
+
+        @Override
+        public void onError(CameraDevice camera, int error) {
+            opening = false;
+            camera.close();
+            cameraDevice = null;
+            String message = "Camera2 open callback failed: " +
+                    cameraErrorName(error) + " (code " + error + ")";
+            failInitialization(message, null);
+            emitError("CAMERA_ERROR", message, null);
+        }
+    };
+
+    private void createPreviewSession() {
+        if (cameraDevice == null) return;
+        closeSession();
+        final Surface sessionPreviewSurface;
+        try {
+            sessionPreviewSurface = obtainPreviewSurface();
+            cameraDevice.createCaptureSession(
+                    List.of(sessionPreviewSurface),
+                    new CameraCaptureSession.StateCallback() {
+                        @Override
+                        public void onConfigured(CameraCaptureSession session) {
+                            if (cameraDevice == null || disposed.get()) {
+                                session.close();
+                                return;
+                            }
+                            captureSession = session;
+                            try {
+                                repeatingBuilder = cameraDevice.createCaptureRequest(
+                                        CameraDevice.TEMPLATE_PREVIEW);
+                                repeatingBuilder.addTarget(sessionPreviewSurface);
+                                applyControls(repeatingBuilder);
+                                captureSession.setRepeatingRequest(
+                                        repeatingBuilder.build(), captureCallback, cameraHandler);
+                                emitState("ready", null);
+                                completeInitialization();
+                            } catch (Throwable error) {
+                                failInitialization(
+                                        detailedMessage("Camera2 repeating preview request failed", error),
+                                        error);
+                            }
+                        }
+
+                        @Override
+                        public void onConfigureFailed(CameraCaptureSession session) {
+                            failInitialization(
+                                    "Camera2 preview session configuration failed for 1920x1080 PRIVATE SurfaceProducer",
+                                    null);
+                        }
+                    },
+                    cameraHandler);
+        } catch (Throwable error) {
+            failInitialization(
+                    detailedMessage("Camera2 preview session creation failed", error), error);
+        }
+    }
+
+    private void createRecordingSession() throws CameraAccessException {
+        if (cameraDevice == null || recorderSurface == null) {
+            throw new IllegalStateException("Recorder surface is unavailable");
+        }
+        final Surface sessionPreviewSurface = obtainPreviewSurface();
+        cameraDevice.createCaptureSession(
+                Arrays.asList(sessionPreviewSurface, recorderSurface),
+                new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(CameraCaptureSession session) {
+                        if (cameraDevice == null || mediaRecorder == null) {
+                            session.close();
+                            failRecordStart("Recorder was released during session setup", null);
+                            return;
+                        }
+                        captureSession = session;
+                        try {
+                            repeatingBuilder = cameraDevice.createCaptureRequest(
+                                    CameraDevice.TEMPLATE_RECORD);
+                            repeatingBuilder.addTarget(sessionPreviewSurface);
+                            repeatingBuilder.addTarget(recorderSurface);
+                            applyControls(repeatingBuilder);
+                            captureSession.setRepeatingRequest(
+                                    repeatingBuilder.build(), captureCallback, cameraHandler);
+                            mediaRecorder.start();
+                            recording = true;
+                            emitState("recording", recordingUri == null ? null : recordingUri.toString());
+                            Map<String, Object> response = new HashMap<>();
+                            response.put("recording", true);
+                            response.put("uri", recordingUri == null ? null : recordingUri.toString());
+                            response.put("width", RECORD_WIDTH);
+                            response.put("height", RECORD_HEIGHT);
+                            response.put("fps", RECORD_FPS);
+                            response.put("codec", "HEVC Main 8-bit");
+                            response.put("videoBitRate", VIDEO_BIT_RATE);
+                            response.put("audio", "AAC 48kHz");
+                            MethodChannel.Result pending = pendingRecordStartResult;
+                            pendingRecordStartResult = null;
+                            replySuccess(pending, response);
+                        } catch (Throwable error) {
+                            failRecordStart("Unable to start MediaRecorder", error);
+                        }
+                    }
+
+                    @Override
+                    public void onConfigureFailed(CameraCaptureSession session) {
+                        failRecordStart("Camera2 UHD recording session configuration failed", null);
+                    }
+                },
+                cameraHandler);
+    }
+
+    private final CameraCaptureSession.CaptureCallback captureCallback =
+            new CameraCaptureSession.CaptureCallback() {
+                @Override
+                public void onCaptureCompleted(CameraCaptureSession session,
+                                               CaptureRequest request,
+                                               TotalCaptureResult result) {
+                    captureResultCounter++;
+                    Long sensorTimestamp = result.get(CaptureResult.SENSOR_TIMESTAMP);
+                    updateCaptureCadence(sensorTimestamp, result.getFrameNumber());
+                    updateZoomController(sensorTimestamp);
+                    Float returnedZoom = result.get(CaptureResult.CONTROL_ZOOM_RATIO);
+                    if (returnedZoom != null && returnedZoom > 0.0f) {
+                        actualZoomRatio = returnedZoom;
+                    }
+                    int metadataInterval = zoomControllerActive ? 3 : 15;
+                    if ((captureResultCounter % metadataInterval) != 0) return;
+                    Map<String, Object> event = new HashMap<>();
+                    event.put("type", "metadata");
+                    event.put("state", recording ? "recording" : "ready");
+                    putNumber(event, "sensorTimestampNs", sensorTimestamp);
+                    event.put("zoomRatio", actualZoomRatio);
+                    event.put("zoomTargetRatio", zoomRatioFromLog(targetZoomLog2));
+                    event.put("zoomVelocityStopsPerSecond", zoomVelocityStopsPerSecond);
+                    if (captureIntervalEmaNs > 0.0) {
+                        event.put("measuredPreviewFps", 1_000_000_000.0 / captureIntervalEmaNs);
+                        event.put("captureIntervalEmaNs", captureIntervalEmaNs);
+                    }
+                    event.put("captureFrameGaps", captureFrameGaps);
+                    putNumber(event, "iso", result.get(CaptureResult.SENSOR_SENSITIVITY));
+                    putNumber(event, "exposureTimeNs", result.get(CaptureResult.SENSOR_EXPOSURE_TIME));
+                    putNumber(event, "frameDurationNs", result.get(CaptureResult.SENSOR_FRAME_DURATION));
+                    putNumber(event, "rollingShutterSkewNs",
+                            result.get(CaptureResult.SENSOR_ROLLING_SHUTTER_SKEW));
+                    Integer aeIndex = result.get(
+                            CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION);
+                    if (aeIndex != null) {
+                        event.put("exposureCompensationIndex", aeIndex);
+                        Rational step = characteristics.get(
+                                CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP);
+                        if (step != null) {
+                            event.put("exposureCompensationEv",
+                                    aeIndex * step.doubleValue());
+                        }
+                    }
+                    Float focus = result.get(CaptureResult.LENS_FOCUS_DISTANCE);
+                    if (focus != null) event.put("focusDistanceDiopters", focus.doubleValue());
+                    putNumber(event, "afState", result.get(CaptureResult.CONTROL_AF_STATE));
+                    putNumber(event, "aeState", result.get(CaptureResult.CONTROL_AE_STATE));
+                    putNumber(event, "edgeMode", result.get(CaptureResult.EDGE_MODE));
+                    putNumber(event, "noiseReductionMode",
+                            result.get(CaptureResult.NOISE_REDUCTION_MODE));
+                    event.put("aeAfLocked", aeAfLocked);
+                    if (requestedAfRegions != null || requestedAeRegions != null) {
+                        event.put("focusPointX", focusPointX);
+                        event.put("focusPointY", focusPointY);
+                    }
+                    event.put("frameNumber", result.getFrameNumber());
+                    if ((captureResultCounter % 30) == 0) appendDeviceTelemetry(event);
+                    if (recording && mediaRecorder != null) {
+                        try {
+                            int amplitude = mediaRecorder.getMaxAmplitude();
+                            double dbfs = amplitude <= 0
+                                    ? -60.0
+                                    : 20.0 * Math.log10(amplitude / 32767.0);
+                            event.put("audioLevelDbfs",
+                                    Math.max(-60.0, Math.min(0.0, dbfs)));
+                        } catch (RuntimeException ignored) {
+                        }
+                    }
+                    emit(event);
+                }
+            };
+
+    private void configureZoomRange() {
+        Range<Float> range = characteristics == null ? null : characteristics.get(
+                CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
+        if (range != null && range.getLower() != null && range.getUpper() != null) {
+            minimumZoomRatio = Math.max(1.0f, range.getLower());
+            maximumZoomRatio = Math.max(minimumZoomRatio, range.getUpper());
+        } else {
+            minimumZoomRatio = 1.0f;
+            Float digitalMaximum = characteristics == null ? null : characteristics.get(
+                    CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+            maximumZoomRatio = digitalMaximum == null
+                    ? 10.0f : Math.max(1.0f, digitalMaximum);
+        }
+        float initial = clamp(actualZoomRatio, minimumZoomRatio, maximumZoomRatio);
+        zoomLog2 = log2(initial);
+        targetZoomLog2 = zoomLog2;
+        actualZoomRatio = initial;
+        zoomVelocityStopsPerSecond = 0.0;
+        zoomControllerActive = false;
+    }
+
+    private void setZoomTargetInternal(float targetRatio) {
+        float clamped = clamp(targetRatio, minimumZoomRatio, maximumZoomRatio);
+        targetZoomLog2 = log2(clamped);
+        if (Math.abs(targetZoomLog2 - zoomLog2) <= ZOOM_POSITION_EPSILON_STOPS) {
+            zoomLog2 = targetZoomLog2;
+            zoomVelocityStopsPerSecond = 0.0;
+            zoomControllerActive = false;
+        } else {
+            zoomControllerActive = true;
+        }
+    }
+
+    private void updateCaptureCadence(Long timestampNs, long frameNumber) {
+        if (timestampNs != null && timestampNs > 0L) {
+            if (lastSensorTimestampNs > 0L && timestampNs > lastSensorTimestampNs) {
+                long interval = timestampNs - lastSensorTimestampNs;
+                if (interval > 1_000_000L && interval < 500_000_000L) {
+                    captureIntervalEmaNs = captureIntervalEmaNs <= 0.0
+                            ? interval
+                            : captureIntervalEmaNs * 0.90 + interval * 0.10;
+                }
+            }
+            lastSensorTimestampNs = timestampNs;
+        }
+        if (lastCaptureFrameNumber >= 0L && frameNumber > lastCaptureFrameNumber + 1L) {
+            captureFrameGaps += frameNumber - lastCaptureFrameNumber - 1L;
+        }
+        lastCaptureFrameNumber = frameNumber;
+    }
+
+    private void updateZoomController(Long sensorTimestampNs) {
+        if (!zoomControllerActive || sensorTimestampNs == null || sensorTimestampNs <= 0L ||
+                repeatingBuilder == null || captureSession == null) {
+            if (sensorTimestampNs != null && sensorTimestampNs > 0L) {
+                lastZoomSensorTimestampNs = sensorTimestampNs;
+            }
+            return;
+        }
+        if (lastZoomSensorTimestampNs <= 0L || sensorTimestampNs <= lastZoomSensorTimestampNs) {
+            lastZoomSensorTimestampNs = sensorTimestampNs;
+            return;
+        }
+        double dt = (sensorTimestampNs - lastZoomSensorTimestampNs) / 1_000_000_000.0;
+        lastZoomSensorTimestampNs = sensorTimestampNs;
+        dt = Math.max(1.0 / 240.0, Math.min(0.100, dt));
+
+        double distance = targetZoomLog2 - zoomLog2;
+        double absoluteDistance = Math.abs(distance);
+        if (absoluteDistance <= ZOOM_POSITION_EPSILON_STOPS &&
+                Math.abs(zoomVelocityStopsPerSecond) <= ZOOM_VELOCITY_EPSILON) {
+            zoomLog2 = targetZoomLog2;
+            zoomVelocityStopsPerSecond = 0.0;
+            zoomControllerActive = false;
+            submitZoomRequest();
+            return;
+        }
+
+        double direction = Math.signum(distance);
+        // Braking speed derived from v² = 2*a*d. Far from the target this is
+        // capped at the phone-tuned maximum; close to it, velocity tapers down.
+        double brakingSpeed = Math.sqrt(
+                2.0 * ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED * absoluteDistance);
+        double desiredVelocity = direction * Math.min(
+                ZOOM_MAX_RATE_STOPS_PER_SECOND, brakingSpeed);
+        zoomVelocityStopsPerSecond = moveToward(
+                zoomVelocityStopsPerSecond,
+                desiredVelocity,
+                ZOOM_ACCEL_STOPS_PER_SECOND_SQUARED * dt);
+
+        double step = zoomVelocityStopsPerSecond * dt;
+        if (Math.signum(step) == direction && Math.abs(step) >= absoluteDistance) {
+            zoomLog2 = targetZoomLog2;
+            zoomVelocityStopsPerSecond = 0.0;
+            zoomControllerActive = false;
+        } else {
+            zoomLog2 += step;
+            zoomLog2 = Math.max(log2(minimumZoomRatio),
+                    Math.min(log2(maximumZoomRatio), zoomLog2));
+        }
+        submitZoomRequest();
+    }
+
+    private void submitZoomRequest() {
+        if (repeatingBuilder == null || captureSession == null) return;
+        try {
+            setSafely(repeatingBuilder, CaptureRequest.CONTROL_ZOOM_RATIO,
+                    zoomRatioFromLog(zoomLog2));
+            captureSession.setRepeatingRequest(
+                    repeatingBuilder.build(), captureCallback, cameraHandler);
+        } catch (Throwable error) {
+            zoomControllerActive = false;
+            zoomVelocityStopsPerSecond = 0.0;
+            emitError("ZOOM_RAMP_FAILED", "Camera2 smooth zoom request failed", error);
+        }
+    }
+
+    private void updateRepeatingRequest() throws CameraAccessException {
+        if (repeatingBuilder == null || captureSession == null) return;
+        applyControls(repeatingBuilder);
+        captureSession.setRepeatingRequest(
+                repeatingBuilder.build(), captureCallback, cameraHandler);
+    }
+
+    private void applyControls(CaptureRequest.Builder builder) {
+        builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+        builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+        setSafely(builder, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
+                CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON);
+        // The UI calls these controls Sharpness and Noise Reduction. Camera2's
+        // public request key for sharpness processing is EDGE_MODE.
+        setSafely(builder, CaptureRequest.EDGE_MODE, requestedSharpnessMode);
+        setSafely(builder, CaptureRequest.NOISE_REDUCTION_MODE,
+                requestedNoiseReductionMode);
+        setSafely(builder, CaptureRequest.CONTROL_ZOOM_RATIO,
+                zoomRatioFromLog(zoomLog2));
+
+        if (autoExposure) {
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+            setSafely(builder, CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                    new Range<>(RECORD_FPS, RECORD_FPS));
+            setSafely(builder, CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,
+                    exposureCompensationIndex(requestedExposureCompensationEv));
+            setSafely(builder, CaptureRequest.CONTROL_AE_LOCK, aeAfLocked);
+            if (requestedAeRegions != null) {
+                setSafely(builder, CaptureRequest.CONTROL_AE_REGIONS, requestedAeRegions);
+            }
+        } else {
+            setSafely(builder, CaptureRequest.CONTROL_AE_LOCK, false);
+            setSafely(builder, CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, 0);
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
+            Range<Integer> isoRange = characteristics.get(
+                    CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+            Range<Long> exposureRange = characteristics.get(
+                    CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
+            int iso = isoRange == null ? requestedIso : clamp(
+                    requestedIso, isoRange.getLower(), isoRange.getUpper());
+            long exposure = exposureRange == null ? requestedExposureNs : clamp(
+                    requestedExposureNs, exposureRange.getLower(), exposureRange.getUpper());
+            exposure = Math.min(exposure, FRAME_DURATION_NS - 1_000_000L);
+            builder.set(CaptureRequest.SENSOR_SENSITIVITY, iso);
+            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure);
+            builder.set(CaptureRequest.SENSOR_FRAME_DURATION, FRAME_DURATION_NS);
+        }
+
+        if (autoFocus) {
+            builder.set(CaptureRequest.CONTROL_AF_MODE,
+                    tapAfActive
+                            ? CaptureRequest.CONTROL_AF_MODE_AUTO
+                            : CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+            if (requestedAfRegions != null) {
+                setSafely(builder, CaptureRequest.CONTROL_AF_REGIONS, requestedAfRegions);
+            }
+        } else {
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF);
+            Float minimumFocus = characteristics.get(
+                    CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+            float max = minimumFocus == null ? 10.0f : minimumFocus;
+            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE,
+                    Math.max(0.0f, Math.min(max, requestedFocusDistance)));
+        }
+
+        builder.set(CaptureRequest.CONTROL_AWB_MODE,
+                whiteBalanceMode(requestedWhiteBalance));
+    }
+
+    private void prepareRecorder() throws IOException {
+        releaseRecorder(false);
+        ContentResolver resolver = activity.getContentResolver();
+        ContentValues values = new ContentValues();
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                .format(new Date());
+        values.put(MediaStore.Video.Media.DISPLAY_NAME,
+                "ZC_" + timestamp + "_UHD30_HEVC.mp4");
+        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+        values.put(MediaStore.Video.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_MOVIES + "/ZirconCinema");
+        values.put(MediaStore.Video.Media.IS_PENDING, 1);
+        recordingUri = resolver.insert(
+                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values);
+        if (recordingUri == null) throw new IOException("MediaStore insert returned null");
+        recordingFileDescriptor = resolver.openFileDescriptor(recordingUri, "rw");
+        if (recordingFileDescriptor == null) {
+            throw new FileNotFoundException("Unable to open MediaStore output");
+        }
+
+        mediaRecorder = new MediaRecorder(activity);
+        mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+        mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        mediaRecorder.setOutputFile(recordingFileDescriptor.getFileDescriptor());
+        mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.HEVC);
+        mediaRecorder.setVideoSize(RECORD_WIDTH, RECORD_HEIGHT);
+        mediaRecorder.setVideoFrameRate(RECORD_FPS);
+        mediaRecorder.setVideoEncodingBitRate(VIDEO_BIT_RATE);
+        mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        mediaRecorder.setAudioSamplingRate(AUDIO_SAMPLE_RATE);
+        mediaRecorder.setAudioChannels(2);
+        mediaRecorder.setAudioEncodingBitRate(AUDIO_BIT_RATE);
+        mediaRecorder.setOrientationHint(recordingOrientationHint());
+        mediaRecorder.prepare();
+        recorderSurface = mediaRecorder.getSurface();
+    }
+
+    private void stopRecordingInternal(MethodChannel.Result result, boolean recreatePreview) {
+        Uri completedUri = recordingUri;
+        boolean stoppedCleanly = false;
+        try {
+            if (captureSession != null) {
+                try {
+                    captureSession.stopRepeating();
+                    captureSession.abortCaptures();
+                } catch (CameraAccessException ignored) {
+                }
+            }
+            if (recording && mediaRecorder != null) {
+                mediaRecorder.stop();
+                stoppedCleanly = true;
+            }
+        } catch (RuntimeException error) {
+            emitError("RECORD_STOP_FAILED",
+                    "Recorder stopped before a valid MP4 could be finalized", error);
+        } finally {
+            recording = false;
+            pendingRecordStartResult = null;
+            closeSession();
+            releaseRecorder(stoppedCleanly);
+        }
+
+        if (stoppedCleanly && completedUri != null) {
+            lastClipUri = completedUri;
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.IS_PENDING, 0);
+            activity.getContentResolver().update(completedUri, values, null, null);
+            emitState("ready", completedUri.toString());
+        } else if (completedUri != null) {
+            activity.getContentResolver().delete(completedUri, null, null);
+        }
+
+        if (recreatePreview && cameraDevice != null && !disposed.get()) {
+            createPreviewSession();
+        }
+
+        if (result != null) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("stopped", stoppedCleanly);
+            response.put("uri", stoppedCleanly && completedUri != null
+                    ? completedUri.toString() : null);
+            replySuccess(result, response);
+        }
+    }
+
+    private void failRecordStart(String message, Throwable error) {
+        MethodChannel.Result result = pendingRecordStartResult;
+        pendingRecordStartResult = null;
+        recording = false;
+        closeSession();
+        releaseRecorder(false);
+        replyError(result, "RECORD_START_FAILED", message, error);
+        emitError("RECORD_START_FAILED", message, error);
+        if (cameraDevice != null && !disposed.get()) createPreviewSession();
+    }
+
+    private void releaseRecorder(boolean keepMediaStoreItem) {
+        if (recorderSurface != null) {
+            recorderSurface.release();
+            recorderSurface = null;
+        }
+        if (mediaRecorder != null) {
+            try {
+                mediaRecorder.reset();
+            } catch (RuntimeException ignored) {
+            }
+            mediaRecorder.release();
+            mediaRecorder = null;
+        }
+        if (recordingFileDescriptor != null) {
+            try {
+                recordingFileDescriptor.close();
+            } catch (IOException ignored) {
+            }
+            recordingFileDescriptor = null;
+        }
+        if (!keepMediaStoreItem && recordingUri != null) {
+            activity.getContentResolver().delete(recordingUri, null, null);
+        }
+        recordingUri = null;
+    }
+
+    private void closeSession() {
+        if (captureSession != null) {
+            try {
+                captureSession.stopRepeating();
+            } catch (Throwable ignored) {
+            }
+            captureSession.close();
+            captureSession = null;
+        }
+        repeatingBuilder = null;
+        lastZoomSensorTimestampNs = 0L;
+    }
+
+    private void closeCameraOnly() {
+        closeSession();
+        if (cameraDevice != null) {
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+        opening = false;
+    }
+
+    private void releasePreviewSurface() {
+        // SurfaceProducer owns and may replace the Surface. Do not release the
+        // cached Surface independently; release the producer as one unit.
+        previewSurface = null;
+        if (textureProducer != null) {
+            textureProducer.setCallback(null);
+            textureProducer.release();
+            textureProducer = null;
+        }
+    }
+
+    private void completeInitialization() {
+        MethodChannel.Result result = pendingInitializeResult;
+        pendingInitializeResult = null;
+        replySuccess(result, initializationPayload());
+    }
+
+    private void failInitialization(String message, Throwable error) {
+        MethodChannel.Result result = pendingInitializeResult;
+        pendingInitializeResult = null;
+        replyError(result, "INITIALIZATION_FAILED", message, error);
+        emitError("INITIALIZATION_FAILED", message, error);
+    }
+
+    private Map<String, Object> initializationPayload() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("textureId", textureProducer == null ? null : textureProducer.id());
+        response.put("previewWidth", previewSize.getWidth());
+        response.put("previewHeight", previewSize.getHeight());
+        response.put("recordWidth", RECORD_WIDTH);
+        response.put("recordHeight", RECORD_HEIGHT);
+        response.put("fps", RECORD_FPS);
+        response.put("cameraId", CAMERA_ID);
+        response.put("rotationDegrees", previewRotationDegrees());
+        response.put("engine", "Camera2");
+        response.put("recorder", "MediaRecorder HEVC Main + AAC");
+        response.put("tintSupported", false);
+        response.put("minimumZoomRatio", minimumZoomRatio);
+        response.put("maximumZoomRatio", maximumZoomRatio);
+        response.put("zoomController", "capture-result-timed log2 ramp");
+        Range<Integer> aeRange = characteristics == null ? null : characteristics.get(
+                CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE);
+        Rational aeStep = characteristics == null ? null : characteristics.get(
+                CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP);
+        if (aeRange != null && aeStep != null) {
+            response.put("exposureCompensationMinEv",
+                    aeRange.getLower() * aeStep.doubleValue());
+            response.put("exposureCompensationMaxEv",
+                    aeRange.getUpper() * aeStep.doubleValue());
+            response.put("exposureCompensationStepEv", aeStep.doubleValue());
+        }
+        return response;
+    }
+
+    private void emitState(String state, String uri) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", "state");
+        event.put("state", state);
+        if (uri != null) event.put("uri", uri);
+        emit(event);
+    }
+
+    private void emitError(String code, String message, Throwable error) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", "error");
+        event.put("state", "error");
+        event.put("code", code);
+        event.put("message", message);
+        if (error != null) event.put("detail", error.toString());
+        emit(event);
+    }
+
+    private void emit(Map<String, Object> event) {
+        activity.runOnUiThread(() -> eventEmitter.emit(event));
+    }
+
+    private void appendDeviceTelemetry(Map<String, Object> event) {
+        try {
+            Intent battery = activity.registerReceiver(
+                    null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (battery != null) {
+                int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+                if (level >= 0 && scale > 0) {
+                    event.put("batteryPercent", Math.round(level * 100.0f / scale));
+                }
+                int status = battery.getIntExtra(
+                        BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN);
+                event.put("batteryCharging",
+                        status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                                status == BatteryManager.BATTERY_STATUS_FULL);
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            StatFs stat = new StatFs(Environment.getDataDirectory().getAbsolutePath());
+            event.put("storageAvailableBytes", stat.getAvailableBytes());
+            event.put("storageTotalBytes", stat.getTotalBytes());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private MeteringRectangle[] supportedRegion(
+            CameraCharacteristics.Key<Integer> maximumRegionsKey,
+            MeteringRectangle region) {
+        Integer maximum = characteristics == null ? null : characteristics.get(maximumRegionsKey);
+        if (maximum == null || maximum <= 0 || region == null) return null;
+        return new MeteringRectangle[]{region};
+    }
+
+    private Rect meteringCropRegion() {
+        Rect active = characteristics == null ? null : characteristics.get(
+                CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+        if (active == null || active.width() <= 0 || active.height() <= 0) {
+            return new Rect(0, 0, 4080, 3060);
+        }
+        // Public preview/record streams are 16:9 while the active array is 4:3.
+        // Meter against the centered 16:9 sensor crop used by UHD/preview.
+        double targetAspect = (double) RECORD_WIDTH / (double) RECORD_HEIGHT;
+        double activeAspect = (double) active.width() / (double) active.height();
+        if (activeAspect < targetAspect) {
+            int height = Math.max(1, (int) Math.round(active.width() / targetAspect));
+            int top = active.top + (active.height() - height) / 2;
+            return new Rect(active.left, top, active.right, top + height);
+        }
+        int width = Math.max(1, (int) Math.round(active.height() * targetAspect));
+        int left = active.left + (active.width() - width) / 2;
+        return new Rect(left, active.top, left + width, active.bottom);
+    }
+
+    private MeteringRectangle meteringRectangle(
+            Rect crop, float displayX, float displayY, float sizeFraction) {
+        float sensorX;
+        float sensorY;
+        switch (previewRotationDegrees()) {
+            case 90 -> {
+                sensorX = displayY;
+                sensorY = 1.0f - displayX;
+            }
+            case 180 -> {
+                sensorX = 1.0f - displayX;
+                sensorY = 1.0f - displayY;
+            }
+            case 270 -> {
+                sensorX = 1.0f - displayY;
+                sensorY = displayX;
+            }
+            default -> {
+                sensorX = displayX;
+                sensorY = displayY;
+            }
+        }
+        int centerX = crop.left + Math.round(clamp01(sensorX) * (crop.width() - 1));
+        int centerY = crop.top + Math.round(clamp01(sensorY) * (crop.height() - 1));
+        int half = Math.max(24,
+                Math.round(Math.min(crop.width(), crop.height()) * sizeFraction * 0.5f));
+        int left = clamp(centerX - half, crop.left, Math.max(crop.left, crop.right - 2));
+        int top = clamp(centerY - half, crop.top, Math.max(crop.top, crop.bottom - 2));
+        int right = clamp(centerX + half, left + 1, crop.right);
+        int bottom = clamp(centerY + half, top + 1, crop.bottom);
+        return new MeteringRectangle(
+                new Rect(left, top, right, bottom),
+                MeteringRectangle.METERING_WEIGHT_MAX);
+    }
+
+    private int previewRotationDegrees() {
+        Integer sensorOrientation = characteristics == null ? null : characteristics.get(
+                CameraCharacteristics.SENSOR_ORIENTATION);
+        int displayDegrees = rotationToDegrees(activity.getDisplay().getRotation());
+        int sensor = sensorOrientation == null ? 90 : sensorOrientation;
+        return (sensor - displayDegrees + 360) % 360;
+    }
+
+    private int recordingOrientationHint() {
+        return previewRotationDegrees();
+    }
+
+    private static int rotationToDegrees(int rotation) {
+        return switch (rotation) {
+            case Surface.ROTATION_90 -> 90;
+            case Surface.ROTATION_180 -> 180;
+            case Surface.ROTATION_270 -> 270;
+            default -> 0;
+        };
+    }
+
+    private int exposureCompensationIndex(float ev) {
+        Range<Integer> range = characteristics.get(
+                CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE);
+        Rational step = characteristics.get(
+                CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP);
+        if (range == null || step == null || step.floatValue() <= 0.0f) return 0;
+        int index = Math.round(ev / step.floatValue());
+        return clamp(index, range.getLower(), range.getUpper());
+    }
+
+    private static int whiteBalanceMode(String value) {
+        return switch (value) {
+            case "3200K" -> CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT;
+            case "4300K" -> CaptureRequest.CONTROL_AWB_MODE_WARM_FLUORESCENT;
+            case "5600K" -> CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT;
+            case "6500K" -> CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT;
+            default -> CaptureRequest.CONTROL_AWB_MODE_AUTO;
+        };
+    }
+
+    private static String detailedMessage(String phase, Throwable error) {
+        if (error == null) return phase;
+        String detail = error.getMessage();
+        if (detail == null || detail.isBlank()) detail = error.toString();
+        return phase + ": " + error.getClass().getSimpleName() + ": " + detail;
+    }
+
+    private static String cameraErrorName(int error) {
+        return switch (error) {
+            case CameraDevice.StateCallback.ERROR_CAMERA_IN_USE -> "CAMERA_IN_USE";
+            case CameraDevice.StateCallback.ERROR_MAX_CAMERAS_IN_USE -> "MAX_CAMERAS_IN_USE";
+            case CameraDevice.StateCallback.ERROR_CAMERA_DISABLED -> "CAMERA_DISABLED";
+            case CameraDevice.StateCallback.ERROR_CAMERA_DEVICE -> "CAMERA_DEVICE";
+            case CameraDevice.StateCallback.ERROR_CAMERA_SERVICE -> "CAMERA_SERVICE";
+            default -> "UNKNOWN_CAMERA_ERROR";
+        };
+    }
+
+    private static boolean isTargetDevice() {
+        return "23090RA98I".equalsIgnoreCase(Build.MODEL) ||
+                "zircon".equalsIgnoreCase(Build.DEVICE);
+    }
+
+    private static boolean booleanValue(Object value, boolean fallback) {
+        return value instanceof Boolean ? (Boolean) value : fallback;
+    }
+
+    private static int intValue(Object value, int fallback) {
+        return value instanceof Number ? ((Number) value).intValue() : fallback;
+    }
+
+    private static long longValue(Object value, long fallback) {
+        return value instanceof Number ? ((Number) value).longValue() : fallback;
+    }
+
+    private static float floatValue(Object value, float fallback) {
+        return value instanceof Number ? ((Number) value).floatValue() : fallback;
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0.0f, Math.min(1.0f, value));
+    }
+
+    private static float clamp(float value, float minimum, float maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private static double log2(double value) {
+        return Math.log(Math.max(value, 0.000001)) / LOG_2;
+    }
+
+    private static float zoomRatioFromLog(double logValue) {
+        return (float) Math.pow(2.0, logValue);
+    }
+
+    private static double moveToward(double value, double target, double maximumDelta) {
+        if (value < target) return Math.min(value + maximumDelta, target);
+        return Math.max(value - maximumDelta, target);
+    }
+
+    private static int clamp(int value, int minimum, int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private static long clamp(long value, long minimum, long maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private static <T> void setSafely(CaptureRequest.Builder builder,
+                                      CaptureRequest.Key<T> key, T value) {
+        try {
+            builder.set(key, value);
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
+    private static void putNumber(Map<String, Object> map, String key, Number value) {
+        if (value != null) map.put(key, value);
+    }
+
+    private void replySuccess(MethodChannel.Result result, Object value) {
+        if (result == null) return;
+        activity.runOnUiThread(() -> result.success(value));
+    }
+
+    private void replyError(MethodChannel.Result result, String code,
+                            String message, Throwable error) {
+        if (result == null) return;
+        String detail = error == null ? null : error.toString();
+        activity.runOnUiThread(() -> result.error(code, message, detail));
+    }
+}

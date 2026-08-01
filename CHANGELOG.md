@@ -9,6 +9,7 @@
 - Removed the `kotlinOptions{}` block from `android/app/build.gradle`: the app contains no Kotlin sources, and the block does not exist on AGP 8.9+/9.0 without the kotlin-android plugin, which broke `assembleRelease` ("Could not find method kotlinOptions()").
 - Added the missing `_CleanHint` widget in `camera_screen.dart` so the clean-feed mode compiles; previously the clean-feed view referenced `_CleanHint` without defining it ("Not a constant expression").
 - Renamed the `SurfaceProducer.Callback` override `onSurfaceCleanup()` to `onSurfaceDestroyed()` in `CameraEngine.java`: `onSurfaceCleanup` does not exist in any released Flutter embedding (the 3.24-era name was `onSurfaceDestroyed`), so the Java compile stage failed with "does not override" on Flutter 3.27+.
+- Restyled the Settings pages to match the reference screenshots: navy canvas `#081420`, deeper selection blue `#2478FC` for selected chips/switches/nav highlights, blue-tinted selected nav rows, a dedicated chip-track panel color, and removal of the right-hand SideRail so the Settings page spans the full width in both orientations.
 
 ## 0.14.0+16 — Lower-latency zoom pacing, ISO 3200 and portrait HUD fix
 

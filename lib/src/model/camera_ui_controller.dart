@@ -183,6 +183,10 @@ class CameraUiController extends ChangeNotifier {
   bool _preventAccidentalChanges = true;
   bool _hapticControlFeedback = true;
   Duration _recorded = Duration.zero;
+  // High-frequency recording clock is deliberately separate from the main
+  // controller notifier: only timecode widgets should rebuild every frame.
+  final ValueNotifier<Duration> _recordingClock =
+      ValueNotifier<Duration>(Duration.zero);
   Timer? _timer;
   Timer? _controlApplyDebounce;
   int _clipCounter = 1;
@@ -281,6 +285,7 @@ class CameraUiController extends ChangeNotifier {
   bool get cleanFeed => _enabledTools.contains(MonitorTool.cleanFeed);
   bool get canRecord => (cameraReady || allowSimulation) && !_recordBusy;
   Duration get recorded => _recorded;
+  ValueListenable<Duration> get recordingClock => _recordingClock;
   int? get textureId => _cameraInitialization?.textureId;
   int get previewWidth => _cameraInitialization?.previewWidth ?? 1920;
   int get previewHeight => _cameraInitialization?.previewHeight ?? 1080;
@@ -330,6 +335,29 @@ class CameraUiController extends ChangeNotifier {
       _formatBytes(_storageAvailableBytes, fallback: '—');
   String get storageTotalLabel =>
       _formatBytes(_storageTotalBytes, fallback: '—');
+  // Reserve 256 MiB so recorder finalization and MediaStore bookkeeping do not
+  // run the device completely out of space.
+  int? get estimatedRecordingSeconds {
+    final int? available = _storageAvailableBytes;
+    if (available == null) return null;
+    const int reserveBytes = 256 * 1024 * 1024;
+    final int usableBytes = available - reserveBytes;
+    if (usableBytes <= 0) return 0;
+    // Add the current AAC request and a small MP4/container allowance.
+    final int bitsPerSecond = bitratePreset.bitsPerSecond + 250000;
+    return (usableBytes * 8 ~/ bitsPerSecond).clamp(0, 1 << 31).toInt();
+  }
+
+  String get remainingRecordTimeLabel {
+    final int? seconds = estimatedRecordingSeconds;
+    if (seconds == null) return '— remaining';
+    final int hours = seconds ~/ 3600;
+    final int minutes = (seconds % 3600) ~/ 60;
+    return hours > 0 ? '${hours}h ${minutes}m remaining' : '${minutes}m remaining';
+  }
+
+  bool get hasSafeRecordingStorage => (estimatedRecordingSeconds ?? 1) > 0;
+
   double? get storageFreeFraction {
     final int? available = _storageAvailableBytes;
     final int? total = _storageTotalBytes;
@@ -382,8 +410,10 @@ class CameraUiController extends ChangeNotifier {
 
   int get nominalFps => int.tryParse(fps) ?? 30;
 
-  String get timecode {
-    final int totalFrames = (_recorded.inMicroseconds * nominalFps / 1000000)
+  String get timecode => timecodeFor(_recorded);
+
+  String timecodeFor(Duration recorded) {
+    final int totalFrames = (recorded.inMicroseconds * nominalFps / 1000000)
         .floor();
     final int frames = totalFrames % nominalFps;
     final int totalSeconds = totalFrames ~/ nominalFps;
@@ -904,6 +934,11 @@ class CameraUiController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (!_recording && !hasSafeRecordingStorage) {
+      _cameraError = 'Not enough free storage to start a safe recording.';
+      notifyListeners();
+      return;
+    }
     _recordBusy = true;
     _runtimeState = _recording
         ? CameraRuntimeState.recording
@@ -951,11 +986,12 @@ class CameraUiController extends ChangeNotifier {
     _activeControl = null;
     if (value) {
       _recorded = Duration.zero;
+      _recordingClock.value = Duration.zero;
       final Stopwatch stopwatch = Stopwatch()..start();
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(milliseconds: 33), (_) {
         _recorded = stopwatch.elapsed;
-        notifyListeners();
+        _recordingClock.value = _recorded;
       });
     } else {
       _timer?.cancel();
@@ -1137,6 +1173,7 @@ class CameraUiController extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _recordingClock.dispose();
     _controlApplyDebounce?.cancel();
     unawaited(_cameraEvents?.cancel());
     if (!allowSimulation) unawaited(_nativeCamera.dispose());

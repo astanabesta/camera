@@ -1193,17 +1193,23 @@ class _Timecode extends StatelessWidget {
             ),
             const SizedBox(width: 6),
           ],
-          Text(
-            controller.timecode,
-            style: TextStyle(
-              color: controller.recording
-                  ? ZirconColors.record
-                  : ZirconColors.text,
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.3,
-              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-            ),
+          ValueListenableBuilder<Duration>(
+            valueListenable: controller.recordingClock,
+            builder: (BuildContext context, Duration recorded, Widget? child) =>
+                Text(
+                  controller.timecodeFor(recorded),
+                  style: TextStyle(
+                    color: controller.recording
+                        ? ZirconColors.record
+                        : ZirconColors.text,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.3,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
+                  ),
+                ),
           ),
         ],
       ),

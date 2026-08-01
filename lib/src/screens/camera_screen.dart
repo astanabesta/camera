@@ -453,9 +453,11 @@ class _PortraitCamera extends StatelessWidget {
             child: VerticalControlPanel(controller: controller),
           ),
         if (controller.activeControl == null)
+          // Keep a clear gap below the SafeArea-aware portrait HUD. The HUD's
+          // effective height includes a device status/cutout inset.
           Positioned(
-            right: 8,
-            top: 148,
+            right: 12,
+            top: 168,
             child: _PortraitTools(controller: controller),
           ),
         Positioned(

@@ -39,14 +39,18 @@ class SettingsScreen extends StatelessWidget {
           Positioned(
             top: 12,
             left: 12,
-            child: GlassPanel(
-              padding: EdgeInsets.zero,
-              borderRadius: 22,
-              color: ZirconColors.panelSoft,
-              child: IconButton(
-                tooltip: 'Back to camera',
-                onPressed: () => controller.setSection(AppSection.camera),
-                icon: const Icon(Icons.arrow_back_rounded),
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: GlassPanel(
+                padding: EdgeInsets.zero,
+                borderRadius: 22,
+                color: ZirconColors.panelSoft,
+                child: IconButton(
+                  tooltip: 'Back to camera',
+                  onPressed: () => controller.setSection(AppSection.camera),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
               ),
             ),
           ),

@@ -1,5 +1,0 @@
-      - name: Build APK
-        run: |
-          export JAVA_OPTS="-Xmx2g -XX:MaxMetaspaceSize=1g"
-          flutter build apk --release --target-platform android-arm64
-          

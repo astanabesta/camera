@@ -562,8 +562,10 @@ class _PortraitTop extends StatelessWidget {
             const Divider(height: 1, color: ZirconColors.stroke),
             SizedBox(
               height: 57,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                 scrollDirection: Axis.horizontal,
                 itemCount: controls.length + (automatic ? 1 : 0),
                 separatorBuilder: (_, __) => const SizedBox(width: 5),
@@ -588,6 +590,7 @@ class _PortraitTop extends StatelessWidget {
                 },
               ),
             ),
+          ),
           ],
         ),
       ),

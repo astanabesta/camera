@@ -39,28 +39,6 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
           ),
-          // Always-visible navigation back to the camera screen. It is kept
-          // outside the settings cards so it is available in both layouts.
-          Positioned(
-            top: 20,
-            left: 20,
-            child: SizedBox(
-              width: 52,
-              height: 52,
-              child: GlassPanel(
-                padding: EdgeInsets.zero,
-                borderRadius: 26,
-                color: ZirconColors.panelStrong,
-                child: IconButton(
-                  tooltip: 'Back to camera',
-                  color: ZirconColors.text,
-                  iconSize: 26,
-                  onPressed: () => controller.setSection(AppSection.camera),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -178,22 +156,32 @@ class _PortraitSettings extends StatelessWidget {
       builder: (BuildContext context, BoxConstraints constraints) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(28, 20, 28, 18),
-            child: Text(
-              'Settings',
-              style: TextStyle(
-                fontSize: 34,
-                fontWeight: FontWeight.bold,
-                letterSpacing: -1,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 28, 18),
+            child: Row(
+              children: <Widget>[
+                IconButton(
+                  tooltip: 'Back to camera',
+                  onPressed: () => controller.setSection(AppSection.camera),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'Settings',
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -1,
+                  ),
+                ),
+              ],
             ),
           ),
-          Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: SizedBox(
-            height: (constraints.maxHeight * .36).clamp(380.0, 654.0).toDouble(),
-            child: GlassPanel(
+          Expanded(
+            flex: 11,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: GlassPanel(
               padding: EdgeInsets.zero,
               borderRadius: 24,
               color: ZirconColors.panelSoft,
@@ -261,11 +249,7 @@ class _PortraitSettings extends StatelessWidget {
                   },
                 ),
               ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.more_horiz, color: ZirconColors.textDim),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
             ],
               ),
             ),
@@ -273,6 +257,7 @@ class _PortraitSettings extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Expanded(
+          flex: 10,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
             child: GlassPanel(
@@ -317,15 +302,25 @@ class _Categories extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const SizedBox(height: 24),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'Settings',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -1,
-            ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(
+            children: <Widget>[
+              IconButton(
+                tooltip: 'Back to camera',
+                onPressed: () => controller.setSection(AppSection.camera),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                'Settings',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -1,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),

@@ -30,7 +30,10 @@ class SettingsScreen extends StatelessWidget {
           SafeArea(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
-                return constraints.maxHeight > constraints.maxWidth
+                // The expanded two-card layout needs enough horizontal room
+                // for both cards and their safe glass margins.
+                return constraints.maxHeight > constraints.maxWidth ||
+                        constraints.maxWidth < 760
                     ? _PortraitSettings(controller: controller)
                     : _LandscapeSettings(controller: controller);
               },
@@ -71,10 +74,10 @@ const List<(SettingsPage, String, IconData)> _pages =
   (SettingsPage.processing, 'Processing', Icons.auto_awesome_outlined),
   (SettingsPage.audio, 'Audio', Icons.bar_chart_outlined),
   (SettingsPage.monitor, 'Monitor', Icons.monitor_outlined),
-  (SettingsPage.liveStream, 'Live Stream', Icons.rss_feed_outlined),
+  (SettingsPage.liveStream, 'Live Stream • Planned', Icons.rss_feed_outlined),
   (SettingsPage.media, 'Media', Icons.play_circle_outline),
   (SettingsPage.functionButtons, 'Function Buttons', Icons.grid_view_outlined),
-  (SettingsPage.luts, 'LUTs', Icons.gradient_rounded),
+  (SettingsPage.luts, 'LUTs • GPU Planned', Icons.gradient_rounded),
 ];
 
 String _title(SettingsPage page) => _pages
@@ -523,10 +526,10 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
 ];
 
 List<Widget> _audioRows(CameraUiController c) => <Widget>[
-  const _ValueRow(title: 'Audio Source', value: 'Default'),
-  const _ValueRow(title: 'Phone Microphone', value: 'Auto'),
+  const _ValueRow(title: 'Audio Source', value: 'Device mic (fixed)', chevron: false),
+  const _ValueRow(title: 'Audio Input Selection', value: 'Not available', enabled: false),
   const _ValueRow(title: 'Audio Format', value: 'AAC'),
-  const _ValueRow(title: 'Record Audio as', value: 'Stereo'),
+  const _ValueRow(title: 'Channel Request', value: 'Stereo'),
   const _ValueRow(title: 'Sample Rate', value: '48 kHz'),
   _ValueRow(
     title: 'Audio Metering',

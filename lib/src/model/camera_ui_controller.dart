@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../camera/native_camera_engine.dart';
 
@@ -166,6 +168,7 @@ class CameraUiController extends ChangeNotifier {
     this.allowSimulation = false,
   }) : _nativeCamera = nativeCamera ?? NativeCameraEngine();
 
+  static const String _preferencesKey = 'zircon.camera.preferences.v1';
   final NativeCameraEngine _nativeCamera;
   final bool allowSimulation;
 
@@ -442,6 +445,59 @@ class CameraUiController extends ChangeNotifier {
     return '${(exposureNs / 1000000000).toStringAsFixed(2)}s';
   }
 
+  Future<void> loadPreferences() async {
+    try {
+      final SharedPreferences preferences = await SharedPreferences.getInstance();
+      final String? raw = preferences.getString(_preferencesKey);
+      if (raw == null) return;
+      final Map<String, dynamic> values = jsonDecode(raw) as Map<String, dynamic>;
+      _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
+      _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
+      _stabilizationMode = StabilizationMode.values[values['stabilization'] as int? ?? _stabilizationMode.index];
+      _zoomSpeed = ZoomSpeed.values[values['zoomSpeed'] as int? ?? _zoomSpeed.index];
+      _sharpnessMode = SharpnessMode.values[values['sharpness'] as int? ?? _sharpnessMode.index];
+      _noiseReductionMode = NoiseReductionMode.values[values['noiseReduction'] as int? ?? _noiseReductionMode.index];
+      _guideRatio = GuideRatio.values[values['guideRatio'] as int? ?? _guideRatio.index];
+      _lockControlsWhileRecording = values['lockControls'] as bool? ?? _lockControlsWhileRecording;
+      _hapticControlFeedback = values['haptics'] as bool? ?? _hapticControlFeedback;
+      final List<dynamic>? tools = values['tools'] as List<dynamic>?;
+      if (tools != null) {
+        _enabledTools
+          ..clear()
+          ..addAll(tools.whereType<String>().map((String name) => MonitorTool.values.firstWhere(
+                (MonitorTool value) => value.name == name,
+                orElse: () => MonitorTool.grid,
+              )));
+      }
+      resolution = _recordingMode.hudLabel;
+      fps = '${_recordingMode.fps}';
+      codec = 'HEVC ${_bitratePreset.display}';
+      notifyListeners();
+    } catch (_) {
+      // Preferences are optional; a malformed old value must never block camera launch.
+    }
+  }
+
+  Future<void> _savePreferences() async {
+    try {
+      final SharedPreferences preferences = await SharedPreferences.getInstance();
+      await preferences.setString(_preferencesKey, jsonEncode(<String, Object>{
+        'recordingMode': _recordingMode.index,
+        'bitrate': _bitratePreset.index,
+        'stabilization': _stabilizationMode.index,
+        'zoomSpeed': _zoomSpeed.index,
+        'sharpness': _sharpnessMode.index,
+        'noiseReduction': _noiseReductionMode.index,
+        'guideRatio': _guideRatio.index,
+        'lockControls': _lockControlsWhileRecording,
+        'haptics': _hapticControlFeedback,
+        'tools': _enabledTools.map((MonitorTool value) => value.name).toList(),
+      }));
+    } catch (_) {
+      // Saving a preference must not interrupt a camera operation.
+    }
+  }
+
   Future<void> initializeCamera() async {
     if (allowSimulation || _runtimeState != CameraRuntimeState.idle) return;
     _runtimeState = CameraRuntimeState.requestingPermissions;
@@ -553,6 +609,7 @@ class CameraUiController extends ChangeNotifier {
     if (_sharpnessMode == value) return;
     _sharpnessMode = value;
     notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -560,6 +617,7 @@ class CameraUiController extends ChangeNotifier {
     if (_noiseReductionMode == value) return;
     _noiseReductionMode = value;
     notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -569,6 +627,7 @@ class CameraUiController extends ChangeNotifier {
     resolution = value.hudLabel;
     fps = '${value.fps}';
     notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -577,6 +636,7 @@ class CameraUiController extends ChangeNotifier {
     _bitratePreset = value;
     codec = 'HEVC ${value.display}';
     notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -584,6 +644,7 @@ class CameraUiController extends ChangeNotifier {
     if (_stabilizationMode == value) return;
     _stabilizationMode = value;
     notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -598,6 +659,7 @@ class CameraUiController extends ChangeNotifier {
     if (_zoomSpeed == value) return;
     _zoomSpeed = value;
     notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -889,6 +951,7 @@ class CameraUiController extends ChangeNotifier {
       }
     }
     notifyListeners();
+    unawaited(_savePreferences());
   }
 
   void restoreControls() {
@@ -901,11 +964,13 @@ class CameraUiController extends ChangeNotifier {
     _guideRatio = value;
     _enabledTools.add(MonitorTool.frameGuides);
     notifyListeners();
+    unawaited(_savePreferences());
   }
 
   void setLockControlsWhileRecording(bool value) {
     _lockControlsWhileRecording = value;
     notifyListeners();
+    unawaited(_savePreferences());
   }
 
   void setPreventAccidentalChanges(bool value) {

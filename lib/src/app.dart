@@ -28,7 +28,8 @@ class _ZirconCinemaAppState extends State<ZirconCinemaApp>
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? CameraUiController();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _controller.loadPreferences();
       if (mounted) unawaited(_controller.initializeCamera());
     });
   }

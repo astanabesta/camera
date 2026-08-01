@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
 import '../model/camera_ui_controller.dart';
+import '../widgets/glass_panel.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({required this.controller, super.key});
@@ -33,6 +34,20 @@ class SettingsScreen extends StatelessWidget {
                     ? _PortraitSettings(controller: controller)
                     : _LandscapeSettings(controller: controller);
               },
+            ),
+          ),
+          Positioned(
+            top: 12,
+            left: 12,
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              borderRadius: 22,
+              color: ZirconColors.panelSoft,
+              child: IconButton(
+                tooltip: 'Back to camera',
+                onPressed: () => controller.setSection(AppSection.camera),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
             ),
           ),
         ],
@@ -68,23 +83,21 @@ class _LandscapeSettings extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(28, 28, 48, 28),
       child: Row(
         children: <Widget>[
-          Container(
+          SizedBox(
             width: 364,
-            decoration: BoxDecoration(
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              borderRadius: 24,
               color: ZirconColors.panelSoft,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: ZirconColors.glassBorder),
+              child: _Categories(controller: controller),
             ),
-            child: _Categories(controller: controller),
           ),
           const SizedBox(width: 48),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: ZirconColors.panelSoft,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: ZirconColors.glassBorder),
-              ),
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              borderRadius: 24,
+              color: ZirconColors.panelSoft,
               child: Column(
                 children: <Widget>[
                   SizedBox(
@@ -165,15 +178,15 @@ class _PortraitSettings extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-          height: (constraints.maxHeight * .36).clamp(380.0, 654.0).toDouble(),
-          margin: const EdgeInsets.symmetric(horizontal: 28),
-          decoration: BoxDecoration(
-            color: ZirconColors.panelSoft,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: ZirconColors.glassBorder),
-          ),
-          child: Column(
+          Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: SizedBox(
+            height: (constraints.maxHeight * .36).clamp(380.0, 654.0).toDouble(),
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              borderRadius: 24,
+              color: ZirconColors.panelSoft,
+              child: Column(
             children: <Widget>[
               Expanded(
                 child: ListView.separated(
@@ -243,18 +256,19 @@ class _PortraitSettings extends StatelessWidget {
               ),
               const SizedBox(height: 8),
             ],
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 20),
         Expanded(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(28, 0, 28, 20),
-            decoration: BoxDecoration(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              borderRadius: 24,
               color: ZirconColors.panelSoft,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: ZirconColors.glassBorder),
-            ),
-            child: Column(
+              child: Column(
               children: <Widget>[
                 const SizedBox(height: 16),
                 Text(
@@ -275,6 +289,7 @@ class _PortraitSettings extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ],
     ),
     );

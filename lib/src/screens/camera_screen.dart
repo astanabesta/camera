@@ -812,14 +812,15 @@ class _PortraitBottom extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Container(
-        height: 132,
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
-        decoration: const BoxDecoration(
-          color: Color(0xEE080C11),
-          border: Border(top: BorderSide(color: ZirconColors.stroke)),
-        ),
-        child: Column(
+        child: SizedBox(
+          height: 124,
+          child: GlassPanel(
+            padding: EdgeInsets.zero,
+            borderRadius: 22,
+            color: ZirconColors.panelStrong,
+            child: Column(
           children: <Widget>[
             Align(
               alignment: Alignment.centerLeft,
@@ -867,6 +868,8 @@ class _PortraitBottom extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  ),
     );
   }
 }
@@ -983,15 +986,15 @@ class _TopHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool automatic = controller.operationMode == CameraOperationMode.auto;
-    return Container(
-      height: 52,
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: ZirconColors.panelSoft,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ZirconColors.glassBorder),
-      ),
-      child: automatic
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: SizedBox(
+        height: 52,
+        child: GlassPanel(
+          padding: EdgeInsets.zero,
+          borderRadius: 12,
+          color: ZirconColors.panelSoft,
+          child: automatic
           ? Row(
               children: <Widget>[
                 _Hud(
@@ -1082,6 +1085,9 @@ class _TopHud extends StatelessWidget {
                 _mode,
               ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1613,13 +1619,15 @@ class _RightControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 80,
-      decoration: const BoxDecoration(
-        color: ZirconColors.panelStrong,
-        border: Border(left: BorderSide(color: ZirconColors.stroke)),
-      ),
-      child: Column(
+    return SizedBox(
+      width: 96,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 12, 12, 12),
+        child: GlassPanel(
+          padding: EdgeInsets.zero,
+          borderRadius: 24,
+          color: ZirconColors.panelStrong,
+          child: Column(
         children: <Widget>[
           const SizedBox(height: 20),
           _RailButton(
@@ -1670,6 +1678,8 @@ class _RightControlPanel extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
+          ),
+        ),
       ),
     );
   }

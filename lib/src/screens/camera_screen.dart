@@ -1652,7 +1652,9 @@ class _RightControlPanel extends StatelessWidget {
             selected: controller.section == AppSection.camera,
             onTap: () => controller.setSection(AppSection.camera),
           ),
-          const Spacer(),
+          // Keep professional separation, but cap it so tall displays do not
+          // turn the rail into mostly empty space.
+          const SizedBox(height: 56),
           RecordButton(
             recording: controller.recording,
             busy: controller.recordBusy,
@@ -1671,7 +1673,7 @@ class _RightControlPanel extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const Spacer(),
+          const SizedBox(height: 56),
           _RailButton(
             icon: Icons.video_library_outlined,
             label: 'MEDIA',
@@ -1692,6 +1694,7 @@ class _RightControlPanel extends StatelessWidget {
             selected: controller.showQuickTools,
             onTap: controller.toggleQuickTools,
           ),
+          const Spacer(),
           const SizedBox(height: 12),
         ],
           ),

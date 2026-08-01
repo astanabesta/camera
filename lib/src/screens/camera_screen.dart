@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../design/tokens.dart';
 import '../model/camera_ui_controller.dart';
 import '../widgets/preview_overlays.dart';
+import '../widgets/glass_panel.dart';
 import '../widgets/side_rail.dart';
 import '../widgets/vertical_control_panel.dart';
 
@@ -1040,16 +1041,6 @@ class _TopHud extends StatelessWidget {
                   () => controller.selectControl(CameraControl.shutter),
                   selected: controller.activeControl == CameraControl.shutter,
                 ),
-                _Hud(
-                  6,
-                  'IRIS',
-                  'f/1.65',
-                  () => CameraScreen._notice(
-                    context,
-                    'The zircon main camera has a fixed f/1.65 aperture.',
-                  ),
-                  locked: true,
-                ),
                 Expanded(flex: 19, child: _Timecode(controller: controller)),
                 _Hud(
                   6,
@@ -1233,14 +1224,14 @@ class _Dashboard extends StatelessWidget {
   Widget _glassBox(Widget child, {int flex = 1}) {
     return Expanded(
       flex: flex,
-      child: Container(
-        margin: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: GlassPanel(
+          padding: EdgeInsets.zero,
+          borderRadius: 12,
           color: ZirconColors.panelSoft,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ZirconColors.glassBorder),
+          child: child,
         ),
-        child: child,
       ),
     );
   }
@@ -1662,15 +1653,13 @@ class _LeftToolRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 58,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
+      child: GlassPanel(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        borderRadius: 16,
         color: ZirconColors.panelSoft,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: ZirconColors.glassBorder),
-      ),
-      child: Column(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           _ToolButton(
@@ -1700,6 +1689,7 @@ class _LeftToolRail extends StatelessWidget {
             onTap: () => CameraScreen._showMonitorTools(context, controller),
           ),
         ],
+        ),
       ),
     );
   }

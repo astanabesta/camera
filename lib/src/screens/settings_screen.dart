@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
 import '../model/camera_ui_controller.dart';
-import '../widgets/side_rail.dart';
+import '../widgets/glass_panel.dart';
+
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({required this.controller, super.key});
@@ -11,21 +12,31 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Row(
+      backgroundColor: ZirconColors.canvas,
+      body: Stack(
+        fit: StackFit.expand,
         children: <Widget>[
-          Expanded(
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  return constraints.maxHeight > constraints.maxWidth
-                      ? _PortraitSettings(controller: controller)
-                      : _LandscapeSettings(controller: controller);
-                },
+          // The settings reference uses a soft, photographic black backdrop,
+          // rather than a flat page colour. Keep it deliberately subtle so
+          // the frosted cards remain the visual hierarchy.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(-.25, -.9),
+                radius: 1.15,
+                colors: <Color>[Color(0xFF142331), Color(0xFF071019), ZirconColors.canvas],
               ),
             ),
           ),
-          SideRail(controller: controller),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                return constraints.maxHeight > constraints.maxWidth
+                    ? _PortraitSettings(controller: controller)
+                    : _LandscapeSettings(controller: controller);
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -56,11 +67,11 @@ class _LandscapeSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(28, 28, 48, 28),
       child: Row(
         children: <Widget>[
           Container(
-            width: 260,
+            width: 364,
             decoration: BoxDecoration(
               color: ZirconColors.panelSoft,
               borderRadius: BorderRadius.circular(24),
@@ -68,7 +79,7 @@ class _LandscapeSettings extends StatelessWidget {
             ),
             child: _Categories(controller: controller),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 48),
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -141,23 +152,24 @@ class _PortraitSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
-          child: Text(
-            'Settings',
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -1,
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(28, 20, 28, 18),
+            child: Text(
+              'Settings',
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -1,
+              ),
             ),
           ),
-        ),
-        Container(
-          height: 380,
-          margin: const EdgeInsets.symmetric(horizontal: 16),
+          Container(
+          height: (constraints.maxHeight * .36).clamp(380.0, 654.0).toDouble(),
+          margin: const EdgeInsets.symmetric(horizontal: 28),
           decoration: BoxDecoration(
             color: ZirconColors.panelSoft,
             borderRadius: BorderRadius.circular(24),
@@ -232,7 +244,7 @@ class _PortraitSettings extends StatelessWidget {
         const SizedBox(height: 20),
         Expanded(
           child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            margin: const EdgeInsets.fromLTRB(28, 0, 28, 20),
             decoration: BoxDecoration(
               color: ZirconColors.panelSoft,
               borderRadius: BorderRadius.circular(24),
@@ -260,6 +272,7 @@ class _PortraitSettings extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }

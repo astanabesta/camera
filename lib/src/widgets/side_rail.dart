@@ -230,7 +230,7 @@ class _ToolButton extends StatelessWidget {
   }
 }
 
-class RecordButton extends StatelessWidget {
+class RecordButton extends StatefulWidget {
   const RecordButton({
     required this.recording,
     required this.busy,
@@ -247,56 +247,94 @@ class RecordButton extends StatelessWidget {
   final double size;
 
   @override
+  State<RecordButton> createState() => _RecordButtonState();
+}
+
+class _RecordButtonState extends State<RecordButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: recording ? 'Stop real recording' : 'Start real recording',
-      enabled: enabled,
+      label: widget.recording ? 'Stop real recording' : 'Start real recording',
+      enabled: widget.enabled,
       child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: ZirconColors.panelStrong,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: !enabled
-                  ? ZirconColors.textDim
-                  : (recording ? ZirconColors.record : ZirconColors.text),
-              width: 2,
-            ),
-            boxShadow: <BoxShadow>[
-              if (recording)
-                BoxShadow(
-                  color: ZirconColors.record.withValues(alpha: .35),
-                  blurRadius: 18,
-                  spreadRadius: 1,
-                ),
-            ],
-          ),
-          child: Center(
-            child: busy
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: ZirconColors.record,
-                    ),
-                  )
-                : AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: recording ? 22 : 39,
-                    height: recording ? 22 : 39,
-                    decoration: BoxDecoration(
-                      color: enabled
-                          ? ZirconColors.record
-                          : ZirconColors.textDim,
-                      borderRadius: BorderRadius.circular(recording ? 5 : 99),
-                    ),
+        onTapDown: (_) => _animationController.forward(),
+        onTapUp: (_) => _animationController.reverse(),
+        onTapCancel: () => _animationController.reverse(),
+        onTap: widget.enabled ? widget.onTap : null,
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutBack,
+            width: widget.size,
+            height: widget.size,
+            decoration: BoxDecoration(
+              color: ZirconColors.panelStrong,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: !widget.enabled
+                    ? ZirconColors.textDim
+                    : (widget.recording
+                        ? ZirconColors.record
+                        : ZirconColors.text),
+                width: 2,
+              ),
+              boxShadow: <BoxShadow>[
+                if (widget.recording)
+                  BoxShadow(
+                    color: ZirconColors.record.withValues(alpha: .35),
+                    blurRadius: 18,
+                    spreadRadius: 1,
                   ),
+              ],
+            ),
+            child: Center(
+              child: widget.busy
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: ZirconColors.record,
+                      ),
+                    )
+                  : AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.elasticOut,
+                      width: widget.recording ? 22 : 39,
+                      height: widget.recording ? 22 : 39,
+                      decoration: BoxDecoration(
+                        color: widget.enabled
+                            ? ZirconColors.record
+                            : ZirconColors.textDim,
+                        borderRadius:
+                            BorderRadius.circular(widget.recording ? 5 : 99),
+                      ),
+                    ),
+            ),
           ),
         ),
       ),

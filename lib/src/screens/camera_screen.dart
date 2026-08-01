@@ -80,24 +80,69 @@ class CameraScreen extends StatelessWidget {
                       Positioned(
                         right: 86,
                         bottom: 10,
-                        child: _QuickToolsOverlay(controller: controller),
+                        child: TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutBack,
+                          tween: Tween<double>(begin: 0, end: 1),
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: value,
+                              child: Opacity(
+                                opacity: value.clamp(0.0, 1.0),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _QuickToolsOverlay(controller: controller),
+                        ),
                       ),
                     Positioned(
                       top: 52,
                       right: 76,
                       bottom: 70,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 160),
-                        child: controller.activeControl == null
-                            ? const SizedBox.shrink(
-                                key: ValueKey<String>('closed'),
-                              )
-                            : VerticalControlPanel(
-                                key: ValueKey<CameraControl?>(
-                                  controller.activeControl,
-                                ),
-                                controller: controller,
-                              ),
+                      child: TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutBack,
+                        tween: Tween<double>(
+                          begin: controller.activeControl == null ? 200 : 0,
+                          end: controller.activeControl == null ? 200 : 0,
+                        ),
+                        builder: (context, offset, child) {
+                          return Transform.translate(
+                            offset: Offset(offset, 0),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              transitionBuilder:
+                                  (Widget child, Animation<double> animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0.2, 0),
+                                      end: Offset.zero,
+                                    ).animate(
+                                      CurvedAnimation(
+                                        parent: animation,
+                                        curve: Curves.easeOutBack,
+                                      ),
+                                    ),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: controller.activeControl == null
+                                  ? const SizedBox.shrink(
+                                      key: ValueKey<String>('closed'),
+                                    )
+                                  : VerticalControlPanel(
+                                      key: ValueKey<CameraControl?>(
+                                        controller.activeControl,
+                                      ),
+                                      controller: controller,
+                                    ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],

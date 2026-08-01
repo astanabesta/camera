@@ -539,13 +539,15 @@ class _PortraitTop extends StatelessWidget {
           ];
     return SafeArea(
       bottom: false,
-      child: SizedBox(
-        height: 116,
-        child: GlassPanel(
-          padding: EdgeInsets.zero,
-          borderRadius: 0,
-          color: ZirconColors.panelSoft,
-          child: Column(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: SizedBox(
+          height: 116,
+          child: GlassPanel(
+            padding: EdgeInsets.zero,
+            borderRadius: 22,
+            color: ZirconColors.panelSoft,
+            child: Column(
           children: <Widget>[
             SizedBox(
               height: 58,
@@ -597,6 +599,7 @@ class _PortraitTop extends StatelessWidget {
         ),
       ),
     ),
+  ),
     );
   }
 }

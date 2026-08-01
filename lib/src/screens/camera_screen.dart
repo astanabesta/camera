@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -80,7 +81,7 @@ class CameraScreen extends StatelessWidget {
                     if (controller.showQuickTools)
                       Positioned(
                         right: 86,
-                        bottom: 10,
+                        bottom: 90,
                         child: TweenAnimationBuilder<double>(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeOutBack,
@@ -1006,6 +1007,8 @@ class _TopHud extends StatelessWidget {
                   () => controller.selectControl(CameraControl.fps),
                 ),
                 Expanded(flex: 19, child: _Timecode(controller: controller)),
+                const SizedBox(width: 5),
+                _OrientationButtons(controller: controller, isPortrait: false),
                 _Hud(
                   8,
                   'FORMAT',
@@ -1042,6 +1045,8 @@ class _TopHud extends StatelessWidget {
                   selected: controller.activeControl == CameraControl.shutter,
                 ),
                 Expanded(flex: 19, child: _Timecode(controller: controller)),
+                const SizedBox(width: 5),
+                _OrientationButtons(controller: controller, isPortrait: false),
                 _Hud(
                   6,
                   'ISO',
@@ -1212,6 +1217,29 @@ class _RuntimeBadge extends StatelessWidget {
         color: ZirconColors.warning,
         fontSize: 7,
         fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+class _CleanHint extends StatelessWidget {
+  const _CleanHint();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xC90B0E13),
+      border: Border.all(color: ZirconColors.stroke),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: const Text(
+      'TAP TO EXIT CLEAN FEED',
+      style: TextStyle(
+        color: ZirconColors.textMuted,
+        fontSize: 7,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
       ),
     ),
   );

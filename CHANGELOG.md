@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.2+17 — Real glass UI, HUD layout fixes and focus stability
+
+- Added a real frosted-glass dashboard: each `_glassBox` now renders a `BackdropFilter` with a 12px gaussian blur over the live preview and a translucent `Colors.white` 8% tint.
+- Restored the portrait/landscape `_OrientationButtons` into the landscape top HUD row next to the timecode.
+- Moved the 3-dot Quick Tools overlay up to `bottom: 90` so it no longer collides with the bottom dashboard/record controls.
+- Raised the tap-to-focus motion threshold in the native Camera2 engine from 0.8 to 2.5 so micro-movement no longer retriggers AF while holding the device steady.
+- Removed the `kotlinOptions{}` block from `android/app/build.gradle`: the app contains no Kotlin sources, and the block does not exist on AGP 8.9+/9.0 without the kotlin-android plugin, which broke `assembleRelease` ("Could not find method kotlinOptions()").
+- Added the missing `_CleanHint` widget in `camera_screen.dart` so the clean-feed mode compiles; previously the clean-feed view referenced `_CleanHint` without defining it ("Not a constant expression").
+- Renamed the `SurfaceProducer.Callback` override `onSurfaceCleanup()` to `onSurfaceDestroyed()` in `CameraEngine.java`: `onSurfaceCleanup` does not exist in any released Flutter embedding (the 3.24-era name was `onSurfaceDestroyed`), so the Java compile stage failed with "does not override" on Flutter 3.27+.
+- Restyled the Settings pages to match the reference screenshots: navy canvas `#081420`, deeper selection blue `#2478FC` for selected chips/switches/nav highlights, blue-tinted selected nav rows, a dedicated chip-track panel color, and removal of the right-hand SideRail so the Settings page spans the full width in both orientations.
+- Merged the liquid-glass restyle: `GlassPanel` now uses blur 22, a specular upper-rim gradient and low-opacity neutral tints so the content behind decides light/dark; the camera dashboard `_glassBox` and the left tool rail are built on `GlassPanel`; Settings gained a soft radial photographic backdrop, a wider 364 px nav column and a responsive portrait layout.
+
 ## 0.14.0+16 — Lower-latency zoom pacing, ISO 3200 and portrait HUD fix
 
 - Moved smooth-zoom advancement from delayed `onCaptureCompleted` metadata to the lower-latency `onCaptureStarted` callback using actual sensor timestamps and frame numbers.

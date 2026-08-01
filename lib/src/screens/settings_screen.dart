@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
 import '../model/camera_ui_controller.dart';
-import '../widgets/glass_panel.dart';
-
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({required this.controller, super.key});
@@ -12,7 +10,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ZirconColors.canvas,
+      backgroundColor: ZirconColors.settingsCanvas,
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
@@ -197,6 +195,12 @@ class _PortraitSettings extends StatelessWidget {
                         child: Container(
                           height: 54,
                           padding: const EdgeInsets.symmetric(horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? ZirconColors.settingsBlue
+                                    .withValues(alpha: .2)
+                                : Colors.transparent,
+                          ),
                           child: Row(
                             children: <Widget>[
                               Container(
@@ -317,7 +321,7 @@ class _Categories extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                     decoration: BoxDecoration(
                       color: selected
-                          ? ZirconColors.settingsBlue.withValues(alpha: .3)
+                          ? ZirconColors.settingsBlue.withValues(alpha: .4)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -739,7 +743,7 @@ class _ChoiceRow<T> extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: ZirconColors.panelStrong,
+            color: ZirconColors.settingsTrack,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: ZirconColors.glassBorder),
           ),

@@ -13,9 +13,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
+    // NOTE: kotlinOptions{} is intentionally omitted. This app has no Kotlin
+    // sources, and the block does not exist on AGP 8.9+/9.0 when the
+    // kotlin-android plugin is not applied.
 
     defaultConfig {
         applicationId = "ai.arena.zirconcinema.ui"

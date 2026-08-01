@@ -36,18 +36,22 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
           ),
+          // Always-visible navigation back to the camera screen. It is kept
+          // outside the settings cards so it is available in both layouts.
           Positioned(
-            top: 12,
-            left: 12,
+            top: 20,
+            left: 20,
             child: SizedBox(
-              width: 48,
-              height: 48,
+              width: 52,
+              height: 52,
               child: GlassPanel(
                 padding: EdgeInsets.zero,
-                borderRadius: 22,
-                color: ZirconColors.panelSoft,
+                borderRadius: 26,
+                color: ZirconColors.panelStrong,
                 child: IconButton(
                   tooltip: 'Back to camera',
+                  color: ZirconColors.text,
+                  iconSize: 26,
                   onPressed: () => controller.setSection(AppSection.camera),
                   icon: const Icon(Icons.arrow_back_rounded),
                 ),

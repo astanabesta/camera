@@ -66,9 +66,11 @@ class CameraScreen extends StatelessWidget {
                       child: _RuntimeBadge(controller: controller),
                     ),
                     // Floating left tools matching the new design
+                    // Landscape-only direct camera tools. These remain on
+                    // the left, separate from the record/navigation rail.
                     Positioned(
-                      top: 100,
-                      left: 10,
+                      top: 148,
+                      left: 24,
                       child: _LeftToolRail(controller: controller),
                     ),
                     Positioned(

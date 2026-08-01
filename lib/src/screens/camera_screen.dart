@@ -1087,8 +1087,7 @@ class _TopHud extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

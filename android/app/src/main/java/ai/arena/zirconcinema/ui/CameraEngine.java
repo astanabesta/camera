@@ -136,7 +136,7 @@ public final class CameraEngine implements SensorEventListener {
     private float focusPointX = 0.5f;
     private float focusPointY = 0.5f;
     private float[] lastGravity = new float[3];
-    private static final float MOTION_THRESHOLD = 0.8f;
+    private static final float MOTION_THRESHOLD = 2.5f;
 
     // Single-lens smooth zoom state. All fields are owned by cameraHandler.
     // Touch/UI events only update targetZoomLog2. Capture results advance the
@@ -696,7 +696,7 @@ public final class CameraEngine implements SensorEventListener {
             }
 
             @Override
-            public void onSurfaceCleanup() {
+            public void onSurfaceDestroyed() {
                 Handler handler = cameraHandler;
                 if (handler != null) {
                     handler.post(() -> {

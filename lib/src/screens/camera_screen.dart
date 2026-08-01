@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -79,7 +80,7 @@ class CameraScreen extends StatelessWidget {
                     if (controller.showQuickTools)
                       Positioned(
                         right: 86,
-                        bottom: 10,
+                        bottom: 90,
                         child: TweenAnimationBuilder<double>(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeOutBack,
@@ -1005,6 +1006,8 @@ class _TopHud extends StatelessWidget {
                   () => controller.selectControl(CameraControl.fps),
                 ),
                 Expanded(flex: 19, child: _Timecode(controller: controller)),
+                const SizedBox(width: 5),
+                _OrientationButtons(controller: controller, isPortrait: false),
                 _Hud(
                   8,
                   'FORMAT',
@@ -1051,6 +1054,8 @@ class _TopHud extends StatelessWidget {
                   locked: true,
                 ),
                 Expanded(flex: 19, child: _Timecode(controller: controller)),
+                const SizedBox(width: 5),
+                _OrientationButtons(controller: controller, isPortrait: false),
                 _Hud(
                   6,
                   'ISO',
@@ -1226,6 +1231,29 @@ class _RuntimeBadge extends StatelessWidget {
   );
 }
 
+class _CleanHint extends StatelessWidget {
+  const _CleanHint();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xC90B0E13),
+      border: Border.all(color: ZirconColors.stroke),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: const Text(
+      'TAP TO EXIT CLEAN FEED',
+      style: TextStyle(
+        color: ZirconColors.textMuted,
+        fontSize: 7,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
+      ),
+    ),
+  );
+}
+
 class _Dashboard extends StatelessWidget {
   const _Dashboard({required this.controller});
   final CameraUiController controller;
@@ -1236,11 +1264,17 @@ class _Dashboard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: ZirconColors.panelSoft,
+          color: Colors.white.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: ZirconColors.glassBorder),
         ),
-        child: child,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: child,
+          ),
+        ),
       ),
     );
   }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.2+17 — Real glass UI, HUD layout fixes and focus stability
+
+- Added a real frosted-glass dashboard: each `_glassBox` now renders a `BackdropFilter` with a 12px gaussian blur over the live preview and a translucent `Colors.white` 8% tint.
+- Restored the portrait/landscape `_OrientationButtons` into the landscape top HUD row next to the timecode.
+- Moved the 3-dot Quick Tools overlay up to `bottom: 90` so it no longer collides with the bottom dashboard/record controls.
+- Raised the tap-to-focus motion threshold in the native Camera2 engine from 0.8 to 2.5 so micro-movement no longer retriggers AF while holding the device steady.
+- Removed the `kotlinOptions{}` block from `android/app/build.gradle`: the app contains no Kotlin sources, and the block does not exist on AGP 8.9+/9.0 without the kotlin-android plugin, which broke `assembleRelease` ("Could not find method kotlinOptions()").
+- Added the missing `_CleanHint` widget in `camera_screen.dart` so the clean-feed mode compiles; previously the clean-feed view referenced `_CleanHint` without defining it ("Not a constant expression").
+- Renamed the `SurfaceProducer.Callback` override `onSurfaceCleanup()` to `onSurfaceDestroyed()` in `CameraEngine.java`: `onSurfaceCleanup` does not exist in any released Flutter embedding (the 3.24-era name was `onSurfaceDestroyed`), so the Java compile stage failed with "does not override" on Flutter 3.27+.
+
 ## 0.14.0+16 — Lower-latency zoom pacing, ISO 3200 and portrait HUD fix
 
 - Moved smooth-zoom advancement from delayed `onCaptureCompleted` metadata to the lower-latency `onCaptureStarted` callback using actual sensor timestamps and frame numbers.

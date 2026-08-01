@@ -10,6 +10,7 @@
 - Added the missing `_CleanHint` widget in `camera_screen.dart` so the clean-feed mode compiles; previously the clean-feed view referenced `_CleanHint` without defining it ("Not a constant expression").
 - Renamed the `SurfaceProducer.Callback` override `onSurfaceCleanup()` to `onSurfaceDestroyed()` in `CameraEngine.java`: `onSurfaceCleanup` does not exist in any released Flutter embedding (the 3.24-era name was `onSurfaceDestroyed`), so the Java compile stage failed with "does not override" on Flutter 3.27+.
 - Restyled the Settings pages to match the reference screenshots: navy canvas `#081420`, deeper selection blue `#2478FC` for selected chips/switches/nav highlights, blue-tinted selected nav rows, a dedicated chip-track panel color, and removal of the right-hand SideRail so the Settings page spans the full width in both orientations.
+- Merged the liquid-glass restyle: `GlassPanel` now uses blur 22, a specular upper-rim gradient and low-opacity neutral tints so the content behind decides light/dark; the camera dashboard `_glassBox` and the left tool rail are built on `GlassPanel`; Settings gained a soft radial photographic backdrop, a wider 364 px nav column and a responsive portrait layout.
 
 ## 0.14.0+16 — Lower-latency zoom pacing, ISO 3200 and portrait HUD fix
 

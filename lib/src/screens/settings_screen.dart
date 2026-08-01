@@ -32,20 +32,22 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-const List<(SettingsPage, String)> _pages = <(SettingsPage, String)>[
-  (SettingsPage.record, 'Record'),
-  (SettingsPage.camera, 'Camera'),
-  (SettingsPage.processing, 'Processing'),
-  (SettingsPage.audio, 'Audio'),
-  (SettingsPage.monitor, 'Monitor'),
-  (SettingsPage.liveStream, 'Live Stream'),
-  (SettingsPage.media, 'Media'),
-  (SettingsPage.functionButtons, 'Function Buttons'),
-  (SettingsPage.luts, 'LUTs'),
+const List<(SettingsPage, String, IconData)> _pages =
+    <(SettingsPage, String, IconData)>[
+  (SettingsPage.record, 'Record', Icons.circle_outlined),
+  (SettingsPage.camera, 'Camera', Icons.camera_alt_outlined),
+  (SettingsPage.processing, 'Processing', Icons.auto_awesome_outlined),
+  (SettingsPage.audio, 'Audio', Icons.bar_chart_outlined),
+  (SettingsPage.monitor, 'Monitor', Icons.monitor_outlined),
+  (SettingsPage.liveStream, 'Live Stream', Icons.rss_feed_outlined),
+  (SettingsPage.media, 'Media', Icons.play_circle_outline),
+  (SettingsPage.functionButtons, 'Function Buttons', Icons.grid_view_outlined),
+  (SettingsPage.luts, 'LUTs', Icons.gradient_rounded),
 ];
 
-String _title(SettingsPage page) =>
-    _pages.firstWhere(((SettingsPage, String) item) => item.$1 == page).$2;
+String _title(SettingsPage page) => _pages
+    .firstWhere(((SettingsPage, String, IconData) item) => item.$1 == page)
+    .$2;
 
 class _LandscapeSettings extends StatelessWidget {
   const _LandscapeSettings({required this.controller});
@@ -53,32 +55,82 @@ class _LandscapeSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        SizedBox(width: 300, child: _Categories(controller: controller)),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 10, 22, 14),
-            child: Column(
-              children: <Widget>[
-                SizedBox(
-                  height: 48,
-                  child: Center(
-                    child: Text(
-                      _title(controller.settingsPage),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 260,
+            decoration: BoxDecoration(
+              color: ZirconColors.panelSoft,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: ZirconColors.glassBorder),
+            ),
+            child: _Categories(controller: controller),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: ZirconColors.panelSoft,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: ZirconColors.glassBorder),
+              ),
+              child: Column(
+                children: <Widget>[
+                  SizedBox(
+                    height: 60,
+                    child: Center(
+                      child: Text(
+                        _title(controller.settingsPage),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(child: _PageBody(controller: controller)),
-              ],
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _PageBody(controller: controller),
+                    ),
+                  ),
+                  _ResetFooter(controller: controller),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ResetFooter extends StatelessWidget {
+  const _ResetFooter({required this.controller});
+  final CameraUiController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      child: Row(
+        children: <Widget>[
+          TextButton(
+            onPressed: () {},
+            child: const Text(
+              'Reset to Default',
+              style: TextStyle(color: ZirconColors.record, fontSize: 16),
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.history, color: ZirconColors.record),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -90,49 +142,121 @@ class _PortraitSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Container(
-          height: 58,
-          color: const Color(0xFF1C1D1F),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(8),
-            scrollDirection: Axis.horizontal,
-            itemCount: _pages.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 5),
-            itemBuilder: (BuildContext context, int index) {
-              final (SettingsPage page, String label) = _pages[index];
-              final bool selected = controller.settingsPage == page;
-              return Material(
-                color: selected
-                    ? ZirconColors.settingsBlue
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-                child: InkWell(
-                  onTap: () => controller.setSettingsPage(page),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Center(
-                      child: Text(label, style: const TextStyle(fontSize: 11)),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        SizedBox(
-          height: 48,
-          child: Center(
-            child: Text(
-              _title(controller.settingsPage),
-              style: const TextStyle(fontSize: 18),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
+          child: Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -1,
             ),
           ),
         ),
+        Container(
+          height: 380,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: ZirconColors.panelSoft,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: ZirconColors.glassBorder),
+          ),
+          child: Column(
+            children: <Widget>[
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _pages.length,
+                  separatorBuilder: (_, __) => const Divider(
+                    height: 1,
+                    color: ZirconColors.glassBorder,
+                    indent: 60,
+                  ),
+                  itemBuilder: (BuildContext context, int index) {
+                    final (SettingsPage page, String label, IconData icon) =
+                        _pages[index];
+                    final bool selected = controller.settingsPage == page;
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => controller.setSettingsPage(page),
+                        child: Container(
+                          height: 54,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: <Widget>[
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: selected
+                                      ? ZirconColors.settingsBlue
+                                      : ZirconColors.panelStrong,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(icon, size: 20, color: Colors.white),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              if (selected)
+                                const CircleAvatar(
+                                  radius: 4,
+                                  backgroundColor: ZirconColors.blue,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(Icons.more_horiz, color: ZirconColors.textDim),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: _PageBody(controller: controller),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            decoration: BoxDecoration(
+              color: ZirconColors.panelSoft,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: ZirconColors.glassBorder),
+            ),
+            child: Column(
+              children: <Widget>[
+                const SizedBox(height: 16),
+                Text(
+                  _title(controller.settingsPage),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _PageBody(controller: controller),
+                  ),
+                ),
+                _ResetFooter(controller: controller),
+              ],
+            ),
           ),
         ),
       ],
@@ -146,57 +270,84 @@ class _Categories extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF1C1D1F),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const SizedBox(height: 18),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 22),
-            child: Text(
-              'Settings',
-              style: TextStyle(
-                fontSize: 29,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -.5,
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 24),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -1,
             ),
           ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: _pages.length,
-              itemBuilder: (BuildContext context, int index) {
-                final (SettingsPage page, String label) = _pages[index];
-                final bool selected = controller.settingsPage == page;
-                return Material(
-                  color: selected
-                      ? ZirconColors.settingsBlue
-                      : Colors.transparent,
-                  child: InkWell(
-                    onTap: () => controller.setSettingsPage(page),
-                    child: Container(
-                      height: 44,
-                      padding: const EdgeInsets.symmetric(horizontal: 22),
-                      alignment: Alignment.centerLeft,
-                      decoration: selected
-                          ? null
-                          : const BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(color: Color(0xFF37383B)),
-                              ),
-                            ),
-                      child: Text(label, style: const TextStyle(fontSize: 17)),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemCount: _pages.length,
+            itemBuilder: (BuildContext context, int index) {
+              final (SettingsPage page, String label, IconData icon) =
+                  _pages[index];
+              final bool selected = controller.settingsPage == page;
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => controller.setSettingsPage(page),
+                  child: Container(
+                    height: 52,
+                    margin:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? ZirconColors.settingsBlue.withValues(alpha: .3)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          icon,
+                          size: 20,
+                          color: selected ? Colors.white : ZirconColors.textDim,
+                        ),
+                        const SizedBox(width: 16),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight:
+                                selected ? FontWeight.w600 : FontWeight.w500,
+                            color: selected ? Colors.white : ZirconColors.text,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (selected)
+                          const CircleAvatar(
+                            radius: 3,
+                            backgroundColor: ZirconColors.blue,
+                          ),
+                      ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+        Center(
+          child: IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.more_horiz, color: ZirconColors.textDim),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }
@@ -218,23 +369,14 @@ class _PageBody extends StatelessWidget {
       SettingsPage.functionButtons => _functionRows,
       SettingsPage.luts => _lutRows,
     };
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF202123),
-        borderRadius: BorderRadius.circular(13),
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: rows.length,
+      separatorBuilder: (_, __) => const Divider(
+        height: 1,
+        color: ZirconColors.glassBorder,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: ListView.separated(
-        padding: EdgeInsets.zero,
-        itemCount: rows.length,
-        separatorBuilder: (_, __) => const Divider(
-          height: 1,
-          indent: 18,
-          endIndent: 18,
-          color: Color(0xFF3A3B3E),
-        ),
-        itemBuilder: (_, int index) => rows[index],
-      ),
+      itemBuilder: (_, int index) => rows[index],
     );
   }
 }
@@ -251,7 +393,6 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
   _ValueRow(
     title: 'Frame Rate',
     value: '${c.recordingMode.fps} fps',
-    chevron: false,
   ),
   _ChoiceRow<BitratePreset>(
     title: 'Bitrate Request',
@@ -261,11 +402,7 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     onChanged: c.setBitratePreset,
   ),
   const _ValueRow(title: 'Color Space', value: 'Rec.709'),
-  const _ValueRow(title: 'Timecode Display', value: 'Record Run'),
-  const _NoticeRow(
-    text:
-        'Public direct modes: UHD30, FHD30 and 4:3 1440p30. 1080p60 and 4080×3060 encoded open-gate are not advertised by the public direct Camera2/encoder path.',
-  ),
+  const _ValueRow(title: 'Advanced', value: ''),
 ];
 
 List<Widget> _cameraRows(CameraUiController c) => <Widget>[
@@ -580,27 +717,46 @@ class _ChoiceRow<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
+    padding: const EdgeInsets.symmetric(vertical: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(title, style: const TextStyle(fontSize: 16)),
-        const SizedBox(height: 9),
-        SegmentedButton<T>(
-          showSelectedIcon: false,
-          segments: values
-              .map(
-                (T item) =>
-                    ButtonSegment<T>(value: item, label: Text(label(item))),
-              )
-              .toList(growable: false),
-          selected: <T>{value},
-          onSelectionChanged: (Set<T> selected) => onChanged(selected.first),
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            textStyle: WidgetStatePropertyAll<TextStyle>(
-              TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
-            ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: ZirconColors.panelStrong,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: ZirconColors.glassBorder),
+          ),
+          child: Row(
+            children: values.map((T item) {
+              final bool selected = item == value;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onChanged(item),
+                  child: Container(
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? ZirconColors.settingsBlue
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      label(item),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : ZirconColors.textDim,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],

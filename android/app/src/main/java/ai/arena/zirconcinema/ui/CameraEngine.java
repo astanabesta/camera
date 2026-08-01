@@ -131,9 +131,12 @@ public final class CameraEngine implements SensorEventListener {
     private MeteringRectangle[] requestedAfRegions;
     private MeteringRectangle[] requestedAeRegions;
     private boolean tapAfActive;
+    private long lastTapAfTimeMs;
     private boolean aeAfLocked;
     private float focusPointX = 0.5f;
     private float focusPointY = 0.5f;
+    private float[] lastGravity = new float[3];
+    private static final float MOTION_THRESHOLD = 0.8f;
 
     // Single-lens smooth zoom state. All fields are owned by cameraHandler.
     // Touch/UI events only update targetZoomLog2. Capture results advance the
@@ -447,6 +450,7 @@ public final class CameraEngine implements SensorEventListener {
                         meteringRectangle(crop, focusPointX, focusPointY, 0.14f));
                 autoFocus = true;
                 tapAfActive = true;
+                lastTapAfTimeMs = SystemClock.elapsedRealtime();
                 // Meter first. A long press locks AE only after the new point
                 // has had time to settle; locking before the trigger would
                 // freeze exposure at the previous region.
@@ -619,6 +623,28 @@ public final class CameraEngine implements SensorEventListener {
     public void onSensorChanged(SensorEvent event) {
         if (event == null || event.values.length < 3 || disposed.get()) return;
         long now = SystemClock.elapsedRealtime();
+
+        // Focus reset on motion logic
+        if (tapAfActive && !aeAfLocked && event.sensor.getType() == Sensor.TYPE_GRAVITY) {
+            float delta = 0;
+            for (int i = 0; i < 3; i++) {
+                delta += Math.abs(event.values[i] - lastGravity[i]);
+                lastGravity[i] = event.values[i];
+            }
+            // If movement is detected or 8 seconds passed, return to continuous AF
+            if (delta > MOTION_THRESHOLD || (now - lastTapAfTimeMs > 8000L)) {
+                tapAfActive = false;
+                requestedAfRegions = null;
+                cameraHandler.post(() -> {
+                    try {
+                        updateRepeatingRequest();
+                    } catch (Throwable ignored) {}
+                });
+            }
+        } else if (event.sensor.getType() == Sensor.TYPE_GRAVITY) {
+            for (int i = 0; i < 3; i++) lastGravity[i] = event.values[i];
+        }
+
         if (now - lastLevelEventMs < 100L) return;
         lastLevelEventMs = now;
         float x = event.values[0];

@@ -246,8 +246,24 @@ class CameraUiController extends ChangeNotifier {
     MonitorTool.waveform,
   };
 
+  bool _showQuickTools = false;
+
   AppSection get section => _section;
   CameraControl? get activeControl => _activeControl;
+  bool get showQuickTools => _showQuickTools;
+
+  void toggleQuickTools() {
+    _showQuickTools = !_showQuickTools;
+    notifyListeners();
+  }
+
+  void hideQuickTools() {
+    if (_showQuickTools) {
+      _showQuickTools = false;
+      notifyListeners();
+    }
+  }
+
   SettingsPage get settingsPage => _settingsPage;
   GuideRatio get guideRatio => _guideRatio;
   CameraRuntimeState get runtimeState => _runtimeState;

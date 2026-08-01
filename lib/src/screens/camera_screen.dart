@@ -63,23 +63,28 @@ class CameraScreen extends StatelessWidget {
                       left: 7,
                       child: _RuntimeBadge(controller: controller),
                     ),
+                    // Floating left tools matching the new design
                     Positioned(
-                      top: 57,
-                      right: 7,
-                      child: _OrientationButtons(
-                        controller: controller,
-                        isPortrait: false,
-                      ),
+                      top: 100,
+                      left: 10,
+                      child: _LeftToolRail(controller: controller),
                     ),
                     Positioned(
                       left: 0,
-                      right: controller.activeControl == null ? 0 : 184,
+                      right: controller.activeControl == null ? 0 : 250,
                       bottom: 0,
                       child: _Dashboard(controller: controller),
                     ),
+                    // Quick Tools (3-dot menu) overlay
+                    if (controller.showQuickTools)
+                      Positioned(
+                        right: 86,
+                        bottom: 10,
+                        child: _QuickToolsOverlay(controller: controller),
+                      ),
                     Positioned(
                       top: 52,
-                      right: 0,
+                      right: 76,
                       bottom: 70,
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 160),
@@ -98,23 +103,7 @@ class CameraScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              CameraToolRail(
-                controller: controller,
-                onZoom: () => controller.selectControl(CameraControl.zoom),
-                onLut: () => _notice(
-                  context,
-                  'Monitor LUT is pass-through only. Real GPU 3D LUT processing remains a validated future milestone.',
-                ),
-                onStabilization: () {
-                  controller.cycleStabilizationMode();
-                  _notice(
-                    context,
-                    'Stabilization request: ${controller.stabilizationMode.label}. Result: ${controller.actualStabilizationLabel}.',
-                  );
-                },
-                onMonitoring: () => _showMonitorTools(context, controller),
-              ),
-              SideRail(controller: controller, showRecord: false),
+              _RightControlPanel(controller: controller),
             ],
           );
         },
@@ -949,9 +938,11 @@ class _TopHud extends StatelessWidget {
     final bool automatic = controller.operationMode == CameraOperationMode.auto;
     return Container(
       height: 52,
-      decoration: const BoxDecoration(
-        color: Color(0xE805070A),
-        border: Border(bottom: BorderSide(color: ZirconColors.stroke)),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: ZirconColors.panelSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ZirconColors.glassBorder),
       ),
       child: automatic
           ? Row(
@@ -1193,25 +1184,35 @@ class _RuntimeBadge extends StatelessWidget {
 class _Dashboard extends StatelessWidget {
   const _Dashboard({required this.controller});
   final CameraUiController controller;
+
+  Widget _glassBox(Widget child, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        margin: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: ZirconColors.panelSoft,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: ZirconColors.glassBorder),
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Container(
-    height: 70,
-    decoration: const BoxDecoration(
-      color: Color(0xEA05070A),
-      border: Border(top: BorderSide(color: ZirconColors.stroke)),
-    ),
-    child: Row(
-      children: <Widget>[
-        const Expanded(flex: 16, child: _Histogram()),
-        const _Divider(),
-        Expanded(flex: 14, child: _Storage(controller: controller)),
-        const _Divider(),
-        Expanded(flex: 21, child: _Project(controller: controller)),
-        const _Divider(),
-        Expanded(flex: 16, child: _Audio(controller: controller)),
-      ],
-    ),
-  );
+        height: 80,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: <Widget>[
+            _glassBox(const _Histogram(), flex: 16),
+            _glassBox(_Storage(controller: controller), flex: 14),
+            _glassBox(_Project(controller: controller), flex: 21),
+            _glassBox(_Audio(controller: controller), flex: 16),
+          ],
+        ),
+      );
 }
 
 class _Histogram extends StatelessWidget {
@@ -1542,19 +1543,238 @@ class _CameraStatus extends StatelessWidget {
   }
 }
 
-class _CleanHint extends StatelessWidget {
-  const _CleanHint();
+class _RightControlPanel extends StatelessWidget {
+  const _RightControlPanel({required this.controller});
+  final CameraUiController controller;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    color: const Color(0xC90B0E13),
-    child: const Text(
-      'CLEAN FEED • TAP TO RESTORE',
-      style: TextStyle(
-        color: ZirconColors.textMuted,
-        fontSize: 7,
-        fontWeight: FontWeight.w800,
+  Widget build(BuildContext context) {
+    return Container(
+      width: 80,
+      decoration: const BoxDecoration(
+        color: ZirconColors.panelStrong,
+        border: Border(left: BorderSide(color: ZirconColors.stroke)),
       ),
-    ),
-  );
+      child: Column(
+        children: <Widget>[
+          const SizedBox(height: 20),
+          _RailButton(
+            icon: Icons.videocam_outlined,
+            label: 'CAMERA',
+            selected: controller.section == AppSection.camera,
+            onTap: () => controller.setSection(AppSection.camera),
+          ),
+          const Spacer(),
+          RecordButton(
+            recording: controller.recording,
+            busy: controller.recordBusy,
+            enabled: controller.canRecord,
+            size: 64,
+            onTap: controller.toggleRecording,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            controller.recording ? 'STOP' : 'REC',
+            style: TextStyle(
+              color: controller.recording
+                  ? ZirconColors.record
+                  : ZirconColors.text,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const Spacer(),
+          _RailButton(
+            icon: Icons.video_library_outlined,
+            label: 'MEDIA',
+            selected: controller.section == AppSection.media,
+            onTap: () => controller.setSection(AppSection.media),
+          ),
+          const SizedBox(height: 12),
+          _RailButton(
+            icon: Icons.tune_rounded,
+            label: 'SETTINGS',
+            selected: controller.section == AppSection.settings,
+            onTap: () => controller.setSection(AppSection.settings),
+          ),
+          const SizedBox(height: 12),
+          _RailButton(
+            icon: Icons.more_horiz_rounded,
+            label: '',
+            selected: controller.showQuickTools,
+            onTap: controller.toggleQuickTools,
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeftToolRail extends StatelessWidget {
+  const _LeftToolRail({required this.controller});
+  final CameraUiController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 58,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: ZirconColors.panelSoft,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ZirconColors.glassBorder),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _ToolButton(
+            icon: Icons.center_focus_strong_rounded,
+            label: 'FOCUS',
+            selected: controller.activeControl == CameraControl.focus,
+            onTap: () => controller.selectControl(CameraControl.focus),
+          ),
+          const SizedBox(height: 12),
+          _ToolButton(
+            icon: Icons.lock_outline_rounded,
+            label: 'AE/AF',
+            selected: controller.aeAfLocked,
+            onTap: () => controller.setAeAfLock(!controller.aeAfLocked),
+          ),
+          const SizedBox(height: 12),
+          _ToolButton(
+            icon: Icons.zoom_in_rounded,
+            label: 'ZOOM',
+            selected: controller.activeControl == CameraControl.zoom,
+            onTap: () => controller.selectControl(CameraControl.zoom),
+          ),
+          const SizedBox(height: 12),
+          _ToolButton(
+            icon: Icons.monitor_heart_outlined,
+            label: 'MON',
+            onTap: () => CameraScreen._showMonitorTools(context, controller),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickToolsOverlay extends StatelessWidget {
+  const _QuickToolsOverlay({required this.controller});
+  final CameraUiController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: ZirconColors.panelStrong,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ZirconColors.stroke),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _ToolButton(
+            icon: Icons.gradient_rounded,
+            label: 'LUT',
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('LUT selection panel')),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _ToolButton(
+            icon: Icons.vibration_rounded,
+            label: 'STABILIZE',
+            selected: controller.stabilizationMode != StabilizationMode.off,
+            onTap: controller.cycleStabilizationMode,
+          ),
+          const SizedBox(width: 8),
+          _ToolButton(
+            icon: Icons.exposure_rounded,
+            label: 'EV',
+            selected:
+                controller.activeControl == CameraControl.exposureCompensation,
+            onTap: () =>
+                controller.selectControl(CameraControl.exposureCompensation),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RailButton extends StatelessWidget {
+  const _RailButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = selected ? ZirconColors.accent : ZirconColors.text;
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 28, color: color),
+          if (label.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolButton extends StatelessWidget {
+  const _ToolButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = selected ? ZirconColors.accent : ZirconColors.text;
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 24, color: color),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 7,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

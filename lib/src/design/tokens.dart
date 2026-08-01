@@ -18,6 +18,8 @@ abstract final class ZirconColors {
   static const Color good = Color(0xFF73D68B);
   static const Color blue = Color(0xFF68A7FF);
   static const Color settingsBlue = Color(0xFF2D9BF0);
+  static const Color glassBackground = Color(0x33000000);
+  static const Color glassBorder = Color(0x1AFFFFFF);
 }
 
 abstract final class ZirconSpacing {

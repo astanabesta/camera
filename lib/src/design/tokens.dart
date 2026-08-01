@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 abstract final class ZirconColors {
   static const Color canvas = Color(0xFF05070A);
-  static const Color panel = Color(0xE611151B);
-  static const Color panelStrong = Color(0xF20B0E13);
-  static const Color panelSoft = Color(0xB3141A21);
-  static const Color stroke = Color(0xFF303A45);
-  static const Color strokeSoft = Color(0x99303A45);
+  // Neutral, content-responsive Liquid Glass tints. These must stay light
+  // enough for the preview/wallpaper behind them to provide the colour.
+  static const Color panel = Color(0x40121A24);
+  static const Color panelStrong = Color(0x54121A24);
+  static const Color panelSoft = Color(0x321C2B3A);
+  static const Color stroke = Color(0x8FFFFFFF);
+  static const Color strokeSoft = Color(0x66FFFFFF);
   static const Color text = Color(0xFFF3F6F8);
   static const Color textMuted = Color(0xFF96A3AE);
   static const Color textDim = Color(0xFF65717C);
@@ -20,8 +22,8 @@ abstract final class ZirconColors {
   static const Color settingsBlue = Color(0xFF2478FC);
   static const Color settingsCanvas = Color(0xFF081420);
   static const Color settingsTrack = Color(0xFF1B242E);
-  static const Color glassBackground = Color(0x33000000);
-  static const Color glassBorder = Color(0x1AFFFFFF);
+  static const Color glassBackground = Color(0x221B2938);
+  static const Color glassBorder = Color(0x73FFFFFF);
 }
 
 abstract final class ZirconSpacing {

@@ -11,8 +11,8 @@ class GlassPanel extends StatelessWidget {
     this.padding = const EdgeInsets.all(8),
     this.borderRadius = ZirconRadius.md,
     this.color = ZirconColors.panel,
-    this.blur = 12,
-    this.borderColor = ZirconColors.strokeSoft,
+    this.blur = 22,
+    this.borderColor = ZirconColors.glassBorder,
   });
 
   final Widget child;
@@ -30,11 +30,44 @@ class GlassPanel extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: DecoratedBox(
           decoration: BoxDecoration(
+            // A very low-opacity neutral tint lets the image below determine
+            // whether the glass reads light or dark.
             color: color,
-            border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(color: borderColor),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: .20),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          child: Padding(padding: padding, child: child),
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              // Specular upper rim and gentle internal falloff are what keep
+              // this from looking like a flat translucent dark rectangle.
+              IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(borderRadius),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[
+                        Colors.white.withValues(alpha: .16),
+                        Colors.white.withValues(alpha: .045),
+                        Colors.white.withValues(alpha: .015),
+                      ],
+                      stops: const <double>[0, .12, 1],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(padding: padding, child: child),
+            ],
+          ),
         ),
       ),
     );

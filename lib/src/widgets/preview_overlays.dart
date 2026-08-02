@@ -96,20 +96,46 @@ class _OverlayPainter extends CustomPainter {
   }
 
   void _drawFrameGuides(Canvas canvas, Size size) {
-    final double guideHeight = size.width / guideRatio;
-    if (guideHeight >= size.height) return;
-    final double top = (size.height - guideHeight) / 2;
-    final Paint shade = Paint()..color = Colors.black.withValues(alpha: .22);
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, top), shade);
-    canvas.drawRect(
-      Rect.fromLTWH(0, size.height - top, size.width, top),
-      shade,
-    );
+    // We adjust guide ratio dynamically if the screen is in portrait
+    // so that "16:9" acts as the natural screen shape. 
+    // Wait, the user specifically wants 9:16, 4:5 etc. 
+    // We will just strictly apply the requested aspect ratio.
+    
+    final double screenRatio = size.width / size.height;
+    double guideW = size.width;
+    double guideH = size.height;
+    
+    // Allow a small epsilon for floating point inaccuracies
+    if (guideRatio > screenRatio + 0.01) {
+      // Guide is wider than screen -> Letterbox (top & bottom bars)
+      guideH = size.width / guideRatio;
+    } else if (guideRatio < screenRatio - 0.01) {
+      // Guide is taller than screen -> Pillarbox (left & right bars)
+      guideW = size.height * guideRatio;
+    } else {
+      return; // Exact match, no bars needed
+    }
+    
+    final Paint shade = Paint()..color = Colors.black.withValues(alpha: .65);
+    
+    if (guideRatio > screenRatio + 0.01) {
+      final double top = (size.height - guideH) / 2;
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, top), shade);
+      canvas.drawRect(Rect.fromLTWH(0, size.height - top, size.width, top), shade);
+    } else {
+      final double left = (size.width - guideW) / 2;
+      canvas.drawRect(Rect.fromLTWH(0, 0, left, size.height), shade);
+      canvas.drawRect(Rect.fromLTWH(size.width - left, 0, left, size.height), shade);
+    }
+    
     final Paint line = Paint()
       ..color = ZirconColors.text.withValues(alpha: .6)
       ..strokeWidth = .8
       ..style = PaintingStyle.stroke;
-    canvas.drawRect(Rect.fromLTWH(0, top, size.width, guideHeight), line);
+      
+    final double left = (size.width - guideW) / 2;
+    final double top = (size.height - guideH) / 2;
+    canvas.drawRect(Rect.fromLTWH(left, top, guideW, guideH), line);
   }
 
   void _drawFalseColorHint(Canvas canvas, Size size) {

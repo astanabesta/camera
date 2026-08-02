@@ -160,10 +160,12 @@ enum MonitorTool {
 }
 
 enum GuideRatio {
-  ratio239('2.39:1', 2.39),
-  ratio185('1.85:1', 1.85),
   ratio169('16:9', 16 / 9),
-  ratio43('4:3', 4 / 3);
+  ratio239('2.39:1', 2.39),
+  ratio43('4:3', 4 / 3),
+  ratio11('1:1', 1.0),
+  ratio45('4:5', 4 / 5),
+  ratio916('9:16', 9 / 16);
 
   const GuideRatio(this.label, this.value);
 
@@ -207,7 +209,7 @@ class CameraUiController extends ChangeNotifier {
   AppSection _section = AppSection.camera;
   CameraControl? _activeControl;
   SettingsPage _settingsPage = SettingsPage.record;
-  GuideRatio _guideRatio = GuideRatio.ratio239;
+  GuideRatio _guideRatio = GuideRatio.ratio169;
   CameraRuntimeState _runtimeState = CameraRuntimeState.idle;
   CameraInitialization? _cameraInitialization;
   StreamSubscription<Map<Object?, Object?>>? _cameraEvents;

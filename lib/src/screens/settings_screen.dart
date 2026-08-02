@@ -525,10 +525,9 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
     ),
   ),
   if (c.tenBitPreflightResult != null)
-    _ValueRow(
+    _DiagnosticResultRow(
       title: '10-Bit Preflight',
       value: c.tenBitPreflightResult!,
-      chevron: false,
     ),
   _CustomRow(
     title: 'P010 UHD Session Test',
@@ -541,10 +540,9 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
     ),
   ),
   if (c.tenBitSessionResult != null)
-    _ValueRow(
+    _DiagnosticResultRow(
       title: 'P010 Session',
       value: c.tenBitSessionResult!,
-      chevron: false,
     ),
   const _NoticeRow(
     text:
@@ -753,6 +751,38 @@ class _SwitchRow extends StatelessWidget {
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _DiagnosticResultRow extends StatelessWidget {
+  const _DiagnosticResultRow({required this.title, required this.value});
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: ZirconColors.accentSoft,
+        border: Border.all(color: ZirconColors.glassBorder),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 5),
+            SelectableText(
+              value,
+              style: const TextStyle(color: ZirconColors.textMuted, fontSize: 12, height: 1.35),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }

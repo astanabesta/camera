@@ -510,6 +510,9 @@ public final class CameraEngine implements SensorEventListener {
                 return;
             }
             final AtomicBoolean replied = new AtomicBoolean(false);
+            final int[] validFrames = {0};
+            final long[] firstTimestampNs = {0L};
+            final long[] lastTimestampNs = {0L};
             final ImageReader reader;
             final Surface sessionPreview;
             try {
@@ -528,19 +531,39 @@ public final class CameraEngine implements SensorEventListener {
                 Image image = null;
                 try {
                     image = source.acquireLatestImage();
-                    if (image == null || !replied.compareAndSet(false, true)) return;
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("session", "PASS");
-                    response.put("frame", "PASS");
-                    response.put("format", image.getFormat());
-                    response.put("width", image.getWidth());
-                    response.put("height", image.getHeight());
-                    response.put("result", "P010 UHD frame received — encoder ramp test required");
-                    replySuccess(result, response);
-                    cameraHandler.post(restorePreview);
+                    if (image == null || replied.get()) return;
+                    final boolean expectedFormat = image.getFormat() == ImageFormat.YCBCR_P010;
+                    final boolean expectedSize = image.getWidth() == 3840 && image.getHeight() == 2160;
+                    if (!expectedFormat || !expectedSize) {
+                        if (replied.compareAndSet(false, true)) {
+                            replyError(result, "P010_FRAME_MISMATCH",
+                                    "Received frame was not YCBCR_P010 at 3840x2160", null);
+                            cameraHandler.post(restorePreview);
+                        }
+                        return;
+                    }
+                    long timestamp = image.getTimestamp();
+                    if (validFrames[0] == 0) firstTimestampNs[0] = timestamp;
+                    lastTimestampNs[0] = timestamp;
+                    validFrames[0]++;
+                    if (validFrames[0] >= 30 && replied.compareAndSet(false, true)) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("session", "PASS");
+                        response.put("frame", "PASS");
+                        response.put("format", image.getFormat());
+                        response.put("width", image.getWidth());
+                        response.put("height", image.getHeight());
+                        response.put("planes", image.getPlanes().length);
+                        response.put("validFrames", validFrames[0]);
+                        response.put("firstTimestampNs", firstTimestampNs[0]);
+                        response.put("lastTimestampNs", lastTimestampNs[0]);
+                        response.put("result", "P010 UHD validation passed: 30 exact-format frames received");
+                        replySuccess(result, response);
+                        cameraHandler.post(restorePreview);
+                    }
                 } catch (Throwable error) {
                     if (replied.compareAndSet(false, true)) {
-                        replyError(result, "P010_FRAME_FAILED", "P010 session opened but frame acquisition failed", error);
+                        replyError(result, "P010_FRAME_FAILED", "P010 frame validation failed", error);
                         cameraHandler.post(restorePreview);
                     }
                 } finally {
@@ -559,7 +582,7 @@ public final class CameraEngine implements SensorEventListener {
                                     request.addTarget(sessionPreview);
                                     request.addTarget(reader.getSurface());
                                     applyControls(request);
-                                    session.capture(request.build(), captureCallback, cameraHandler);
+                                    session.setRepeatingRequest(request.build(), captureCallback, cameraHandler);
                                 } catch (Throwable error) {
                                     if (replied.compareAndSet(false, true)) {
                                         replyError(result, "P010_CAPTURE_FAILED", "Unable to capture P010 test frame", error);
@@ -576,10 +599,11 @@ public final class CameraEngine implements SensorEventListener {
                         }, cameraHandler);
                 cameraHandler.postDelayed(() -> {
                     if (replied.compareAndSet(false, true)) {
-                        replyError(result, "P010_TIMEOUT", "No UHD P010 frame arrived within 3 seconds", null);
+                        replyError(result, "P010_TIMEOUT",
+                                "Fewer than 30 valid UHD P010 frames arrived within 5 seconds", null);
                         restorePreview.run();
                     }
-                }, 3000);
+                }, 5000);
             } catch (Throwable error) {
                 if (replied.compareAndSet(false, true)) {
                     replyError(result, "P010_SESSION_FAILED", "Unable to create UHD P010 session", error);

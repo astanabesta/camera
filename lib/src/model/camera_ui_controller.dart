@@ -1037,7 +1037,14 @@ class CameraUiController extends ChangeNotifier {
     try {
       final Map<Object?, Object?> result =
           await _nativeCamera.runTenBitRec709SessionTest();
-      _tenBitSessionResult = '${result['result'] ?? 'No result returned'}';
+      _tenBitSessionResult = [
+        '${result['result'] ?? 'No result returned'}',
+        if (result['format'] != null) 'Format: ${result['format']}',
+        if (result['width'] != null && result['height'] != null)
+          'Size: ${result['width']}×${result['height']}',
+        if (result['planes'] != null) 'Planes: ${result['planes']}',
+        if (result['validFrames'] != null) 'Valid frames: ${result['validFrames']}',
+      ].join('\n');
     } catch (error) {
       _tenBitSessionResult = _friendlyPlatformError(error);
     } finally {

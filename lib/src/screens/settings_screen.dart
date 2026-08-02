@@ -468,6 +468,13 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     ),
   ),
   const _ValueRow(title: 'Color Space', value: 'Rec.709'),
+  _ChoiceRow<GuideRatio>(
+    title: 'Aspect Ratio',
+    value: c.guideRatio,
+    values: GuideRatio.values,
+    label: (GuideRatio value) => value.label,
+    onChanged: c.setGuideRatio,
+  ),
   const _ValueRow(title: 'Advanced', value: ''),
 ];
 

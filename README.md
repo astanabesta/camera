@@ -4,13 +4,24 @@ Device-specific Flutter cinema-camera application for Xiaomi Redmi Note 13 Pro+ 
 
 ## Current build
 
-- Release archive: `ZirconCinema-0.14.0-EXTRACT-FIRST.zip` (keep release assets outside Git history)
-- Version: `0.14.0+16`
-- Package: `ai.arena.zirconcinema.ui`
-- ABI: `arm64-v8a`
-- APK SHA-256: `7fbbcdf62cbc9db1a32896da8b4eed6020762b590984884790d0ff9a79b6e997`
+### Source on `main`
 
-The package and personal-test certificate are unchanged, so this APK can update v0.1/v0.2/v0.3.0. It is release-optimized but signed with an Android debug certificate; replace that certificate before production distribution.
+- Source version: `0.15.2+17`
+- Source revision: latest commit on the `main` branch
+- Package: `ai.arena.zirconcinema.ui`
+- Target ABI: `arm64-v8a`
+- Target device: Xiaomi Redmi Note 13 Pro+ 5G, model `23090RA98I` / codename `zircon`
+- Android target: API 36
+
+The current `main` branch contains the latest UI, focus-feedback, storage-safety, and preference-persistence changes. It is source code, not a prebuilt release archive. Build a fresh APK from this branch using the commands in [Build locally](#build-locally).
+
+### Archived release
+
+- Archived release archive: `ZirconCinema-0.14.0-EXTRACT-FIRST.zip`
+- Archived release version: `0.14.0+16`
+- Archived APK SHA-256: `7fbbcdf62cbc9db1a32896da8b4eed6020762b590984884790d0ff9a79b6e997`
+
+The package and personal-test certificate remain unchanged, so a newly built APK can update earlier personal-test installs. The app is release-optimized but uses an Android debug certificate; replace it with a production signing key before public distribution.
 
 ### Latest `main` branch updates — UI, reliability, and workflow
 

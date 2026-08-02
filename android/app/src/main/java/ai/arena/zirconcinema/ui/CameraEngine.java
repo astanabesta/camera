@@ -1295,12 +1295,21 @@ public final class CameraEngine implements SensorEventListener {
             if (requestedBitDepth == 10 && Build.VERSION.SDK_INT >= 33) {
                 p010Writer = ImageWriter.newInstance(recorderSurface, 4, ImageFormat.YCBCR_P010);
                 p010Reader = ImageReader.newInstance(requestedRecordWidth, requestedRecordHeight, ImageFormat.YCBCR_P010, 4);
+                final long[] timeOffset = {0L};
+                final boolean[] isFirstFrame = {true};
+
                 p010Reader.setOnImageAvailableListener(reader -> {
                     try {
                         Image image = reader.acquireNextImage();
                         if (image != null) {
                             if (p010Writer != null && recording) {
-                                image.setTimestamp(System.nanoTime());
+                                if (isFirstFrame[0]) {
+                                    // Calculate offset between Camera hardware clock and MediaRecorder clock
+                                    timeOffset[0] = System.nanoTime() - image.getTimestamp();
+                                    isFirstFrame[0] = false;
+                                }
+                                // Preserve flawless hardware cadence, just shifted to the correct timebase
+                                image.setTimestamp(image.getTimestamp() + timeOffset[0]);
                                 p010Writer.queueInputImage(image);
                             } else {
                                 image.close();

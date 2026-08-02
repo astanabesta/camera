@@ -52,6 +52,16 @@ enum RecordingMode {
   final String hudLabel;
 }
 
+
+enum RecordBitDepth {
+  eightBit('8-bit SDR', 8),
+  tenBit('10-bit SDR', 10);
+
+  const RecordBitDepth(this.label, this.depth);
+  final String label;
+  final int depth;
+}
+
 enum BitratePreset {
   low('Low', 20000000),
   medium('Medium', 50000000),
@@ -227,6 +237,7 @@ class CameraUiController extends ChangeNotifier {
   SharpnessMode _sharpnessMode = SharpnessMode.off;
   NoiseReductionMode _noiseReductionMode = NoiseReductionMode.minimal;
   RecordingMode _recordingMode = RecordingMode.uhd30;
+  RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
   BitratePreset _bitratePreset = BitratePreset.high;
   StabilizationMode _stabilizationMode = StabilizationMode.optical;
   ZoomSpeed _zoomSpeed = ZoomSpeed.slow;
@@ -334,6 +345,7 @@ class CameraUiController extends ChangeNotifier {
   SharpnessMode get sharpnessMode => _sharpnessMode;
   NoiseReductionMode get noiseReductionMode => _noiseReductionMode;
   RecordingMode get recordingMode => _recordingMode;
+  RecordBitDepth get recordBitDepth => _recordBitDepth;
   BitratePreset get bitratePreset => _bitratePreset;
   StabilizationMode get stabilizationMode => _stabilizationMode;
   ZoomSpeed get zoomSpeed => _zoomSpeed;
@@ -465,6 +477,7 @@ class CameraUiController extends ChangeNotifier {
       if (raw == null) return;
       final Map<String, dynamic> values = jsonDecode(raw) as Map<String, dynamic>;
       _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
+      _recordBitDepth = RecordBitDepth.values[values['recordBitDepth'] as int? ?? _recordBitDepth.index];
       _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
       _stabilizationMode = StabilizationMode.values[values['stabilization'] as int? ?? _stabilizationMode.index];
       _zoomSpeed = ZoomSpeed.values[values['zoomSpeed'] as int? ?? _zoomSpeed.index];
@@ -496,6 +509,7 @@ class CameraUiController extends ChangeNotifier {
       final SharedPreferences preferences = await SharedPreferences.getInstance();
       await preferences.setString(_preferencesKey, jsonEncode(<String, Object>{
         'recordingMode': _recordingMode.index,
+        'recordBitDepth': _recordBitDepth.index,
         'bitrate': _bitratePreset.index,
         'stabilization': _stabilizationMode.index,
         'zoomSpeed': _zoomSpeed.index,
@@ -642,6 +656,14 @@ class CameraUiController extends ChangeNotifier {
     notifyListeners();
     unawaited(_savePreferences());
     _scheduleNativeControlApply();
+  }
+
+  
+  void setRecordBitDepth(RecordBitDepth value) {
+    if (_recording || _recordBitDepth == value) return;
+    _recordBitDepth = value;
+    notifyListeners();
+    _applyControls();
   }
 
   void setBitratePreset(BitratePreset value) {
@@ -1232,6 +1254,7 @@ class CameraUiController extends ChangeNotifier {
         'recordWidth': _recordingMode.width,
         'recordHeight': _recordingMode.height,
         'recordFps': _recordingMode.fps,
+        'recordBitDepth': _recordBitDepth.depth,
         'videoBitRate': _bitratePreset.bitsPerSecond,
         'stabilizationMode': _stabilizationMode.nativeValue,
         'zoomTargetRateStopsPerSecond': _zoomSpeed.targetRateStopsPerSecond,

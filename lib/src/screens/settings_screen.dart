@@ -439,6 +439,13 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     label: (BitratePreset value) => '${value.label} ${value.display}',
     onChanged: c.setBitratePreset,
   ),
+  _ChoiceRow<RecordBitDepth>(
+    title: 'Color Depth',
+    value: c.recordBitDepth,
+    values: RecordBitDepth.values,
+    label: (RecordBitDepth value) => value.label,
+    onChanged: c.setRecordBitDepth,
+  ),
   const _ValueRow(title: 'Color Space', value: 'Rec.709'),
   const _ValueRow(title: 'Advanced', value: ''),
 ];

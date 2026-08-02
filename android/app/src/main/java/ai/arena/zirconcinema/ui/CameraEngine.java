@@ -140,6 +140,7 @@ public final class CameraEngine implements SensorEventListener {
     private int requestedRecordHeight = DEFAULT_RECORD_HEIGHT;
     private int requestedRecordFps = DEFAULT_RECORD_FPS;
     private int requestedVideoBitRate = DEFAULT_VIDEO_BIT_RATE;
+    private int requestedBitDepth = 10;
     // 0=off, 1=optical, 2=electronic.
     private int requestedStabilizationMode = 1;
     private MeteringRectangle[] requestedAfRegions;
@@ -303,6 +304,7 @@ public final class CameraEngine implements SensorEventListener {
                 response.put("sharpnessModeRequested", requestedSharpnessMode);
                 response.put("noiseReductionModeRequested", requestedNoiseReductionMode);
                 response.put("recordWidth", requestedRecordWidth);
+                response.put("recordBitDepth", requestedBitDepth);
                 response.put("recordHeight", requestedRecordHeight);
                 response.put("recordFps", requestedRecordFps);
                 response.put("videoBitRate", requestedVideoBitRate);
@@ -321,6 +323,7 @@ public final class CameraEngine implements SensorEventListener {
     }
 
     private void updateRecordingConfiguration(Map<String, Object> values) {
+        requestedBitDepth = intValue(values.get("recordBitDepth"), requestedBitDepth);
         int width = intValue(values.get("recordWidth"), requestedRecordWidth);
         int height = intValue(values.get("recordHeight"), requestedRecordHeight);
         int fps = intValue(values.get("recordFps"), requestedRecordFps);
@@ -1272,7 +1275,7 @@ public final class CameraEngine implements SensorEventListener {
         
         Surface cameraTargetSurface = recorderSurface;
         try {
-            if (Build.VERSION.SDK_INT >= 33) {
+            if (requestedBitDepth == 10 && Build.VERSION.SDK_INT >= 33) {
                 p010Writer = ImageWriter.newInstance(recorderSurface, 4, ImageFormat.YCBCR_P010);
                 p010Reader = ImageReader.newInstance(requestedRecordWidth, requestedRecordHeight, ImageFormat.YCBCR_P010, 4);
                 p010Reader.setOnImageAvailableListener(reader -> {
@@ -1324,7 +1327,7 @@ public final class CameraEngine implements SensorEventListener {
                             response.put("width", requestedRecordWidth);
                             response.put("height", requestedRecordHeight);
                             response.put("fps", requestedRecordFps);
-                            response.put("codec", "HEVC Main10 10-bit (Zero-Copy)");
+                            response.put("codec", requestedBitDepth == 10 ? "HEVC Main10 10-bit (Zero-Copy)" : "HEVC Main 8-bit");
                             response.put("videoBitRate", requestedVideoBitRate);
                             response.put("audio", "AAC 48kHz");
                             MethodChannel.Result pending = pendingRecordStartResult;
@@ -1694,7 +1697,7 @@ public final class CameraEngine implements SensorEventListener {
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         mediaRecorder.setOutputFile(recordingFileDescriptor.getFileDescriptor());
         mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.HEVC);
-        if (Build.VERSION.SDK_INT >= 26) {
+        if (requestedBitDepth == 10 && Build.VERSION.SDK_INT >= 26) {
             mediaRecorder.setVideoEncodingProfileLevel(
                     MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
                     MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel51);
@@ -1858,6 +1861,7 @@ public final class CameraEngine implements SensorEventListener {
         response.put("previewWidth", previewSize.getWidth());
         response.put("previewHeight", previewSize.getHeight());
         response.put("recordWidth", requestedRecordWidth);
+                response.put("recordBitDepth", requestedBitDepth);
         response.put("recordHeight", requestedRecordHeight);
         response.put("fps", requestedRecordFps);
         response.put("videoBitRate", requestedVideoBitRate);

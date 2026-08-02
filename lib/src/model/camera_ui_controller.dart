@@ -34,7 +34,6 @@ enum NoiseReductionMode {
 }
 
 enum RecordingMode {
-  openGate('Open Gate (Full Sensor)', 4080, 3060, 30, 'OPEN GATE'),
   uhd30('4K', 3840, 2160, 30, 'UHD'),
   fhd30('1080p', 1920, 1080, 30, 'FHD'),
   fourThree30('4:3 1440p', 1920, 1440, 30, '4:3 1440p');
@@ -55,12 +54,28 @@ enum RecordingMode {
 
 
 
+enum LogCurve {
+  rec709('Rec.709'),
+  xiaomi('Xiaomi'),
+  slog3('S-Log3');
+
+  const LogCurve(this.label);
+  final String label;
+
+  String get camera2Value {
+    switch (this) {
+      case LogCurve.rec709: return 'Rec709';
+      case LogCurve.xiaomi: return 'Xiaomi';
+      case LogCurve.slog3: return 'S-Log3';
+    }
+  }
+}
+
 enum FilmStyle {
   standard('Standard'),
   cinematic('Cinematic'),
   fuji('Fuji'),
-  vivid('Vivid'),
-  slog3('S-Log3');
+  vivid('Vivid');
 
   const FilmStyle(this.label);
   final String label;
@@ -71,7 +86,6 @@ enum FilmStyle {
       case FilmStyle.cinematic: return 'Cinematic';
       case FilmStyle.fuji: return 'Fuji';
       case FilmStyle.vivid: return 'Vivid';
-      case FilmStyle.slog3: return 'S-Log3';
     }
   }
 }
@@ -265,7 +279,7 @@ class CameraUiController extends ChangeNotifier {
   NoiseReductionMode _noiseReductionMode = NoiseReductionMode.minimal;
   RecordingMode _recordingMode = RecordingMode.uhd30;
   RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
-  bool _logProfile = false;
+  LogCurve _logCurve = LogCurve.rec709;
   FilmStyle _filmStyle = FilmStyle.standard;
   double _shadowLift = 0.0;
   double _highlightRollOff = 0.0;
@@ -377,7 +391,7 @@ class CameraUiController extends ChangeNotifier {
   NoiseReductionMode get noiseReductionMode => _noiseReductionMode;
   RecordingMode get recordingMode => _recordingMode;
   RecordBitDepth get recordBitDepth => _recordBitDepth;
-  bool get logProfile => _logProfile;
+  LogCurve get logCurve => _logCurve;
   FilmStyle get filmStyle => _filmStyle;
   double get shadowLift => _shadowLift;
   double get highlightRollOff => _highlightRollOff;
@@ -513,7 +527,7 @@ class CameraUiController extends ChangeNotifier {
       final Map<String, dynamic> values = jsonDecode(raw) as Map<String, dynamic>;
       _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
       _recordBitDepth = RecordBitDepth.values[values['recordBitDepth'] as int? ?? _recordBitDepth.index];
-      _logProfile = values['logProfile'] as bool? ?? false;
+      _logCurve = LogCurve.values[values['logCurve'] as int? ?? _logCurve.index];
       _filmStyle = FilmStyle.values[values['filmStyle'] as int? ?? _filmStyle.index];
       _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
       _stabilizationMode = StabilizationMode.values[values['stabilization'] as int? ?? _stabilizationMode.index];
@@ -720,9 +734,9 @@ class CameraUiController extends ChangeNotifier {
     _scheduleNativeControlApply();
   }
 
-  void setLogProfile(bool value) {
-    if (_recording || _logProfile == value) return;
-    _logProfile = value;
+  void setLogCurve(LogCurve value) {
+    if (_recording || _logCurve == value) return;
+    _logCurve = value;
     notifyListeners();
     _scheduleNativeControlApply();
   }
@@ -1324,7 +1338,7 @@ class CameraUiController extends ChangeNotifier {
         'recordFps': _recordingMode.fps,
         'recordBitDepth': _recordBitDepth.depth,
         'hlgProfile': _recordBitDepth == RecordBitDepth.hlg10,
-        'logProfile': _logProfile,
+        'logCurve': _logCurve.camera2Value,
         'filmStyle': _filmStyle.index,
         'filmStyle': _filmStyle.camera2Value,
         'shadowLift': _shadowLift,

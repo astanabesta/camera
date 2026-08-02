@@ -146,7 +146,7 @@ public final class CameraEngine implements SensorEventListener {
     private int requestedRecordFps = DEFAULT_RECORD_FPS;
     private int requestedVideoBitRate = DEFAULT_VIDEO_BIT_RATE;
     private int requestedBitDepth = 10;
-    private boolean requestedLogProfile = false;
+    private String requestedLogCurve = "Rec709";
     private boolean requestedHlgProfile = false;
     private String requestedFilmStyle = "Standard";
     private float shadowLift = 0.0f;
@@ -296,7 +296,8 @@ public final class CameraEngine implements SensorEventListener {
                         values.get("sharpnessMode"), requestedSharpnessMode);
                 requestedNoiseReductionMode = intValue(
                         values.get("noiseReductionMode"), requestedNoiseReductionMode);
-                requestedLogProfile = booleanValue(values.get("logProfile"), requestedLogProfile);
+                Object logObj = values.get("logCurve");
+                if (logObj != null) requestedLogCurve = String.valueOf(logObj);
                 requestedHlgProfile = booleanValue(values.get("hlgProfile"), requestedHlgProfile);
                 Object filmStyleObj = values.get("filmStyle");
                 if (filmStyleObj != null) requestedFilmStyle = String.valueOf(filmStyleObj);
@@ -344,7 +345,6 @@ public final class CameraEngine implements SensorEventListener {
         int height = intValue(values.get("recordHeight"), requestedRecordHeight);
         int fps = intValue(values.get("recordFps"), requestedRecordFps);
         boolean supportedSize =
-                (width == 4080 && height == 3060) || // OPEN GATE 4:3 Full Sensor
                 (width == 3840 && height == 2160) || // 16:9 UHD
                 (width == 1920 && height == 1080) || // 16:9 FHD
                 (width == 1920 && height == 1440);   // 4:3 FHD
@@ -1741,8 +1741,10 @@ public final class CameraEngine implements SensorEventListener {
                 
         if (requestedHlgProfile && Build.VERSION.SDK_INT >= 33) {
             // HLG handles its own tonemapping via the DynamicRangeProfile
-            // Do not override TONEMAP_MODE
-        } else if (requestedLogProfile) {
+        } else if ("S-Log3".equals(requestedLogCurve)) {
+            builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
+            builder.set(CaptureRequest.TONEMAP_CURVE, createSLog3Curve());
+        } else if ("Xiaomi".equals(requestedLogCurve)) {
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
             builder.set(CaptureRequest.TONEMAP_CURVE, createXiaomiLogCurve());
         } else {
@@ -1757,11 +1759,7 @@ public final class CameraEngine implements SensorEventListener {
                 case "Vivid":
                     builder.set(CaptureRequest.TONEMAP_CURVE, createVividCurve());
                     break;
-                case "S-Log3":
-                    builder.set(CaptureRequest.TONEMAP_CURVE, createSLog3Curve());
-                    break;
                 default:
-                    // Apply a "Safe" Rec.709 curve that prevents shadows from crushing in 10-bit SDR
                     builder.set(CaptureRequest.TONEMAP_CURVE, createSafeRec709Curve());
                     break;
             }
@@ -2262,15 +2260,16 @@ public final class CameraEngine implements SensorEventListener {
         // - 90% White sits at 61% IRE
         // This is an extremely flat curve designed for massive dynamic range and standard S-Log3 CST workflows.
         float[] curve = new float[] {
-            0.0000f, 0.0350f, // Black level
-            0.0200f, 0.1200f, // Deep shadows
-            0.0500f, 0.2200f, // Shadows
+            0.0000f, 0.0350f, 
+            0.0200f, 0.1200f, 
+            0.0500f, 0.2200f, 
             0.1800f, 0.4100f, // 18% Middle Gray EXACTLY at 41% IRE
             0.3000f, 0.4600f, 
             0.5000f, 0.5200f, 
             0.7000f, 0.5700f,
             0.9000f, 0.6100f, // 90% White EXACTLY at 61% IRE
-            1.0000f, 0.6400f  // Peak sensor white rolls off softly
+            0.9800f, 0.6500f,
+            1.0000f, 1.0000f  // MUST anchor at 1.0 to prevent highlight flickering/solarization
         };
         return new TonemapCurve(curve, curve, curve);
     }

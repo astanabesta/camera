@@ -453,19 +453,12 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     label: (FilmStyle value) => value.label,
     onChanged: c.setFilmStyle,
   ),
-  _CustomRow(
+  _ChoiceRow<LogCurve>(
     title: 'Tone Curve',
-    trailing: SegmentedButton<bool>(
-      showSelectedIcon: false,
-      segments: const <ButtonSegment<bool>>[
-        ButtonSegment<bool>(value: false, label: Text('Rec.709')),
-        ButtonSegment<bool>(value: true, label: Text('Xiaomi Log')),
-      ],
-      selected: <bool>{c.logProfile},
-      onSelectionChanged: (Set<bool> newSelection) {
-        c.setLogProfile(newSelection.first);
-      },
-    ),
+    value: c.logCurve,
+    values: LogCurve.values,
+    label: (LogCurve value) => value.label,
+    onChanged: c.setLogCurve,
   ),
   const _ValueRow(title: 'Color Space', value: 'Rec.709'),
   _ChoiceRow<GuideRatio>(

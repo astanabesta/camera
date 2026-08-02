@@ -344,9 +344,10 @@ public final class CameraEngine implements SensorEventListener {
         int height = intValue(values.get("recordHeight"), requestedRecordHeight);
         int fps = intValue(values.get("recordFps"), requestedRecordFps);
         boolean supportedSize =
-                (width == 3840 && height == 2160) ||
-                (width == 1920 && height == 1080) ||
-                (width == 1920 && height == 1440);
+                (width == 4080 && height == 3060) || // OPEN GATE 4:3 Full Sensor
+                (width == 3840 && height == 2160) || // 16:9 UHD
+                (width == 1920 && height == 1080) || // 16:9 FHD
+                (width == 1920 && height == 1440);   // 4:3 FHD
         if (supportedSize && fps == 30) {
             requestedRecordWidth = width;
             requestedRecordHeight = height;

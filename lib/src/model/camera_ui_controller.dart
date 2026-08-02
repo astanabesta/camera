@@ -34,6 +34,7 @@ enum NoiseReductionMode {
 }
 
 enum RecordingMode {
+  openGate('Open Gate (Full Sensor)', 4080, 3060, 30, 'OPEN GATE'),
   uhd30('4K', 3840, 2160, 30, 'UHD'),
   fhd30('1080p', 1920, 1080, 30, 'FHD'),
   fourThree30('4:3 1440p', 1920, 1440, 30, '4:3 1440p');

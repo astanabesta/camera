@@ -1177,7 +1177,7 @@ public final class CameraEngine implements SensorEventListener {
             }
 
             @Override
-            public void onSurfaceDestroyed() {
+            public void onSurfaceCleanup() {
                 Handler handler = cameraHandler;
                 if (handler != null) {
                     handler.post(() -> {

@@ -459,7 +459,7 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
       showSelectedIcon: false,
       segments: const <ButtonSegment<bool>>[
         ButtonSegment<bool>(value: false, label: Text('Rec.709')),
-        ButtonSegment<bool>(value: true, label: Text('Zircon Log')),
+        ButtonSegment<bool>(value: true, label: Text('Xiaomi Log')),
       ],
       selected: <bool>{c.logProfile},
       onSelectionChanged: (Set<bool> newSelection) {

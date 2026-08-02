@@ -446,6 +446,20 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     label: (RecordBitDepth value) => value.label,
     onChanged: c.setRecordBitDepth,
   ),
+  _CustomRow(
+    title: 'Tone Curve',
+    trailing: SegmentedButton<bool>(
+      showSelectedIcon: false,
+      segments: const <ButtonSegment<bool>>[
+        ButtonSegment<bool>(value: false, label: Text('Rec.709')),
+        ButtonSegment<bool>(value: true, label: Text('Zircon Log')),
+      ],
+      selected: <bool>{c.logProfile},
+      onSelectionChanged: (Set<bool> newSelection) {
+        c.setLogProfile(newSelection.first);
+      },
+    ),
+  ),
   const _ValueRow(title: 'Color Space', value: 'Rec.709'),
   const _ValueRow(title: 'Advanced', value: ''),
 ];

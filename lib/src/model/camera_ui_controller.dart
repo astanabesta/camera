@@ -238,6 +238,7 @@ class CameraUiController extends ChangeNotifier {
   NoiseReductionMode _noiseReductionMode = NoiseReductionMode.minimal;
   RecordingMode _recordingMode = RecordingMode.uhd30;
   RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
+  bool _logProfile = false;
   BitratePreset _bitratePreset = BitratePreset.high;
   StabilizationMode _stabilizationMode = StabilizationMode.optical;
   ZoomSpeed _zoomSpeed = ZoomSpeed.slow;
@@ -346,6 +347,7 @@ class CameraUiController extends ChangeNotifier {
   NoiseReductionMode get noiseReductionMode => _noiseReductionMode;
   RecordingMode get recordingMode => _recordingMode;
   RecordBitDepth get recordBitDepth => _recordBitDepth;
+  bool get logProfile => _logProfile;
   BitratePreset get bitratePreset => _bitratePreset;
   StabilizationMode get stabilizationMode => _stabilizationMode;
   ZoomSpeed get zoomSpeed => _zoomSpeed;
@@ -478,6 +480,7 @@ class CameraUiController extends ChangeNotifier {
       final Map<String, dynamic> values = jsonDecode(raw) as Map<String, dynamic>;
       _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
       _recordBitDepth = RecordBitDepth.values[values['recordBitDepth'] as int? ?? _recordBitDepth.index];
+      _logProfile = values['logProfile'] as bool? ?? false;
       _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
       _stabilizationMode = StabilizationMode.values[values['stabilization'] as int? ?? _stabilizationMode.index];
       _zoomSpeed = ZoomSpeed.values[values['zoomSpeed'] as int? ?? _zoomSpeed.index];
@@ -659,6 +662,14 @@ class CameraUiController extends ChangeNotifier {
   }
 
   
+  
+  void setLogProfile(bool value) {
+    if (_recording || _logProfile == value) return;
+    _logProfile = value;
+    notifyListeners();
+    _applyControls();
+  }
+
   void setRecordBitDepth(RecordBitDepth value) {
     if (_recording || _recordBitDepth == value) return;
     _recordBitDepth = value;
@@ -1255,6 +1266,7 @@ class CameraUiController extends ChangeNotifier {
         'recordHeight': _recordingMode.height,
         'recordFps': _recordingMode.fps,
         'recordBitDepth': _recordBitDepth.depth,
+        'logProfile': _logProfile,
         'videoBitRate': _bitratePreset.bitsPerSecond,
         'stabilizationMode': _stabilizationMode.nativeValue,
         'zoomTargetRateStopsPerSecond': _zoomSpeed.targetRateStopsPerSecond,

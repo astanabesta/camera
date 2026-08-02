@@ -19,6 +19,7 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.hardware.camera2.params.TonemapCurve;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -141,6 +142,7 @@ public final class CameraEngine implements SensorEventListener {
     private int requestedRecordFps = DEFAULT_RECORD_FPS;
     private int requestedVideoBitRate = DEFAULT_VIDEO_BIT_RATE;
     private int requestedBitDepth = 10;
+    private boolean requestedLogProfile = false;
     // 0=off, 1=optical, 2=electronic.
     private int requestedStabilizationMode = 1;
     private MeteringRectangle[] requestedAfRegions;
@@ -286,6 +288,7 @@ public final class CameraEngine implements SensorEventListener {
                         values.get("sharpnessMode"), requestedSharpnessMode);
                 requestedNoiseReductionMode = intValue(
                         values.get("noiseReductionMode"), requestedNoiseReductionMode);
+                requestedLogProfile = booleanValue(values.get("logProfile"), requestedLogProfile);
                 updateZoomSpeedConfiguration(values);
                 Object zoom = values.get("zoomRatio");
                 if (zoom instanceof Number) {
@@ -377,6 +380,7 @@ public final class CameraEngine implements SensorEventListener {
                 response.put("targetZoomRatio", zoomRatioFromLog(targetZoomLog2));
                 response.put("actualZoomRatio", actualZoomRatio);
                 response.put("minimumZoomRatio", minimumZoomRatio);
+        response.put("logProfileSupported", true);
                 response.put("maximumZoomRatio", maximumZoomRatio);
                 response.put("zoomTargetRateStopsPerSecond",
                         zoomTargetRateStopsPerSecond);
@@ -1667,6 +1671,32 @@ public final class CameraEngine implements SensorEventListener {
 
         builder.set(CaptureRequest.CONTROL_AWB_MODE,
                 whiteBalanceMode(requestedWhiteBalance));
+                
+        if (requestedLogProfile) {
+            builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
+            builder.set(CaptureRequest.TONEMAP_CURVE, createLogTonemapCurve());
+        } else {
+            builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
+        }
+    }
+
+    
+    private TonemapCurve createLogTonemapCurve() {
+        // Create a custom flattened S-curve to preserve highlights and lift shadows.
+        // Format: [in_0, out_0, in_1, out_1, ..., in_N, out_N] on a 0.0 to 1.0 scale.
+        float[] curve = new float[] {
+            0.0000f, 0.0500f, // Lift blacks slightly to preserve noise floor
+            0.0500f, 0.1500f, // Boost deep shadows
+            0.1000f, 0.2500f, // Boost shadows
+            0.2000f, 0.3500f,
+            0.3000f, 0.4500f, // Midtones raised
+            0.5000f, 0.6000f,
+            0.7000f, 0.7000f, // Highlight compression starts
+            0.8500f, 0.7800f, // Knee rolls off smoothly
+            0.9500f, 0.8500f,
+            1.0000f, 0.9000f  // Drop peak white to prevent hard clipping
+        };
+        return new TonemapCurve(curve, curve, curve);
     }
 
     private void prepareRecorder() throws IOException {
@@ -1872,6 +1902,7 @@ public final class CameraEngine implements SensorEventListener {
         response.put("recorder", "MediaRecorder HEVC Main + AAC");
         response.put("tintSupported", false);
         response.put("minimumZoomRatio", minimumZoomRatio);
+        response.put("logProfileSupported", true);
         response.put("maximumZoomRatio", maximumZoomRatio);
         response.put("zoomController", "capture-result-timed log2 ramp");
         Range<Integer> aeRange = characteristics == null ? null : characteristics.get(

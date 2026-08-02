@@ -625,7 +625,10 @@ public final class CameraEngine implements SensorEventListener {
             return;
         }
         cameraHandler.post(() -> {
-            final int width = 256, height = 256, frameCount = 30, fps = 30;
+            // 1024 horizontal samples intentionally exercise every 10-bit
+            // luma code value. A 256-step ramp cannot distinguish 8-bit from
+            // 10-bit precision.
+            final int width = 1024, height = 128, frameCount = 30, fps = 30;
             MediaCodec codec = null;
             MediaMuxer muxer = null;
             ParcelFileDescriptor fd = null;
@@ -654,6 +657,12 @@ public final class CameraEngine implements SensorEventListener {
                 format.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
                 format.setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000);
                 format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+                format.setInteger(MediaFormat.KEY_COLOR_STANDARD,
+                        MediaFormat.COLOR_STANDARD_BT709);
+                format.setInteger(MediaFormat.KEY_COLOR_TRANSFER,
+                        MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
+                format.setInteger(MediaFormat.KEY_COLOR_RANGE,
+                        MediaFormat.COLOR_RANGE_LIMITED);
                 codec = MediaCodec.createEncoderByType("video/hevc");
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 codec.start();
@@ -696,7 +705,7 @@ public final class CameraEngine implements SensorEventListener {
                 if (!outputDone) throw new IOException("Encoder timed out before EOS");
                 Map<String, Object> response = new HashMap<>();
                 response.put("requestedProfile", "HEVC Main10");
-                response.put("input", "P010 10-bit ramp 256x256");
+                response.put("input", "P010 10-bit 1024-code ramp 1024x128");
                 response.put("submittedFrames", submitted);
                 response.put("encodedFrames", encoded);
                 response.put("uri", uri.toString());

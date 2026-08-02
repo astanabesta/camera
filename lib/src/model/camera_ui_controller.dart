@@ -59,7 +59,8 @@ enum FilmStyle {
   standard('Standard'),
   cinematic('Cinematic'),
   fuji('Fuji'),
-  vivid('Vivid');
+  vivid('Vivid'),
+  slog3('S-Log3');
 
   const FilmStyle(this.label);
   final String label;
@@ -70,6 +71,7 @@ enum FilmStyle {
       case FilmStyle.cinematic: return 'Cinematic';
       case FilmStyle.fuji: return 'Fuji';
       case FilmStyle.vivid: return 'Vivid';
+      case FilmStyle.slog3: return 'S-Log3';
     }
   }
 }

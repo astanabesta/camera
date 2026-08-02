@@ -1757,6 +1757,9 @@ public final class CameraEngine implements SensorEventListener {
                 case "Vivid":
                     builder.set(CaptureRequest.TONEMAP_CURVE, createVividCurve());
                     break;
+                case "S-Log3":
+                    builder.set(CaptureRequest.TONEMAP_CURVE, createSLog3Curve());
+                    break;
                 default:
                     // Apply a "Safe" Rec.709 curve that prevents shadows from crushing in 10-bit SDR
                     builder.set(CaptureRequest.TONEMAP_CURVE, createSafeRec709Curve());
@@ -2250,6 +2253,27 @@ public final class CameraEngine implements SensorEventListener {
         activity.runOnUiThread(() -> result.error(code, message, detail));
     }
 
+
+
+    private TonemapCurve createSLog3Curve() {
+        // Sony S-Log3 emulation based on official Sony whitepaper math:
+        // - Absolute black (0%) sits at 3.5% IRE
+        // - Middle Gray (18%) sits at 41% IRE
+        // - 90% White sits at 61% IRE
+        // This is an extremely flat curve designed for massive dynamic range and standard S-Log3 CST workflows.
+        float[] curve = new float[] {
+            0.0000f, 0.0350f, // Black level
+            0.0200f, 0.1200f, // Deep shadows
+            0.0500f, 0.2200f, // Shadows
+            0.1800f, 0.4100f, // 18% Middle Gray EXACTLY at 41% IRE
+            0.3000f, 0.4600f, 
+            0.5000f, 0.5200f, 
+            0.7000f, 0.5700f,
+            0.9000f, 0.6100f, // 90% White EXACTLY at 61% IRE
+            1.0000f, 0.6400f  // Peak sensor white rolls off softly
+        };
+        return new TonemapCurve(curve, curve, curve);
+    }
 
     private TonemapCurve createXiaomiLogCurve() {
         // Xiaomi's official 10-bit Log (V-Log/Mi-Log) emulation based on standard smartphone sensor characteristics.

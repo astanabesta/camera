@@ -1293,8 +1293,8 @@ public final class CameraEngine implements SensorEventListener {
         Surface cameraTargetSurface = recorderSurface;
         try {
             if (requestedBitDepth == 10 && Build.VERSION.SDK_INT >= 33) {
-                p010Writer = ImageWriter.newInstance(recorderSurface, 4, ImageFormat.YCBCR_P010);
-                p010Reader = ImageReader.newInstance(requestedRecordWidth, requestedRecordHeight, ImageFormat.YCBCR_P010, 4);
+                p010Writer = ImageWriter.newInstance(recorderSurface, 8, ImageFormat.YCBCR_P010);
+                p010Reader = ImageReader.newInstance(requestedRecordWidth, requestedRecordHeight, ImageFormat.YCBCR_P010, 8);
                 final long[] timeOffset = {0L};
                 final boolean[] isFirstFrame = {true};
 
@@ -1687,6 +1687,9 @@ public final class CameraEngine implements SensorEventListener {
 
         if (autoExposure) {
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+            
+            // STRICTLY enforce constant framerate by locking AE target to [30, 30]
+            // If we don't do this, Xiaomi's ISP will dynamically drop the framerate in low light to gather more exposure
             setSafely(builder, CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
                     new Range<>(requestedRecordFps, requestedRecordFps));
             setSafely(builder, CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,

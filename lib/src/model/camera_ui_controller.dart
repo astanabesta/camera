@@ -53,6 +53,27 @@ enum RecordingMode {
 }
 
 
+
+enum FilmStyle {
+  standard('Standard'),
+  cinematic('Cinematic'),
+  fuji('Fuji'),
+  vivid('Vivid');
+
+  const FilmStyle(this.label);
+  final String label;
+  
+  String get camera2Value {
+    switch (this) {
+      case FilmStyle.standard: return 'Standard';
+      case FilmStyle.cinematic: return 'Cinematic';
+      case FilmStyle.fuji: return 'Fuji';
+      case FilmStyle.vivid: return 'Vivid';
+    }
+  }
+}
+
+
 enum RecordBitDepth {
   eightBit('8-bit SDR', 8),
   tenBit('10-bit SDR', 10),
@@ -240,6 +261,7 @@ class CameraUiController extends ChangeNotifier {
   RecordingMode _recordingMode = RecordingMode.uhd30;
   RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
   bool _logProfile = false;
+  FilmStyle _filmStyle = FilmStyle.standard;
   BitratePreset _bitratePreset = BitratePreset.high;
   StabilizationMode _stabilizationMode = StabilizationMode.optical;
   ZoomSpeed _zoomSpeed = ZoomSpeed.slow;
@@ -349,6 +371,7 @@ class CameraUiController extends ChangeNotifier {
   RecordingMode get recordingMode => _recordingMode;
   RecordBitDepth get recordBitDepth => _recordBitDepth;
   bool get logProfile => _logProfile;
+  FilmStyle get filmStyle => _filmStyle;
   BitratePreset get bitratePreset => _bitratePreset;
   StabilizationMode get stabilizationMode => _stabilizationMode;
   ZoomSpeed get zoomSpeed => _zoomSpeed;
@@ -482,6 +505,7 @@ class CameraUiController extends ChangeNotifier {
       _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
       _recordBitDepth = RecordBitDepth.values[values['recordBitDepth'] as int? ?? _recordBitDepth.index];
       _logProfile = values['logProfile'] as bool? ?? false;
+      _filmStyle = FilmStyle.values[values['filmStyle'] as int? ?? _filmStyle.index];
       _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
       _stabilizationMode = StabilizationMode.values[values['stabilization'] as int? ?? _stabilizationMode.index];
       _zoomSpeed = ZoomSpeed.values[values['zoomSpeed'] as int? ?? _zoomSpeed.index];
@@ -664,6 +688,14 @@ class CameraUiController extends ChangeNotifier {
 
   
   
+  
+  void setFilmStyle(FilmStyle value) {
+    if (_recording || _filmStyle == value) return;
+    _filmStyle = value;
+    notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
   void setLogProfile(bool value) {
     if (_recording || _logProfile == value) return;
     _logProfile = value;
@@ -1269,6 +1301,8 @@ class CameraUiController extends ChangeNotifier {
         'recordBitDepth': _recordBitDepth.depth,
         'hlgProfile': _recordBitDepth == RecordBitDepth.hlg10,
         'logProfile': _logProfile,
+        'filmStyle': _filmStyle.index,
+        'filmStyle': _filmStyle.camera2Value,
         'videoBitRate': _bitratePreset.bitsPerSecond,
         'stabilizationMode': _stabilizationMode.nativeValue,
         'zoomTargetRateStopsPerSecond': _zoomSpeed.targetRateStopsPerSecond,

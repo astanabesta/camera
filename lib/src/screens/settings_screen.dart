@@ -446,6 +446,13 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     label: (RecordBitDepth value) => value.label,
     onChanged: c.setRecordBitDepth,
   ),
+  _ChoiceRow<FilmStyle>(
+    title: 'Color Profile',
+    value: c.filmStyle,
+    values: FilmStyle.values,
+    label: (FilmStyle value) => value.label,
+    onChanged: c.setFilmStyle,
+  ),
   _CustomRow(
     title: 'Tone Curve',
     trailing: SegmentedButton<bool>(

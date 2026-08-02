@@ -148,6 +148,7 @@ public final class CameraEngine implements SensorEventListener {
     private int requestedBitDepth = 10;
     private boolean requestedLogProfile = false;
     private boolean requestedHlgProfile = false;
+    private String requestedFilmStyle = "Standard";
     // 0=off, 1=optical, 2=electronic.
     private int requestedStabilizationMode = 1;
     private MeteringRectangle[] requestedAfRegions;
@@ -295,6 +296,8 @@ public final class CameraEngine implements SensorEventListener {
                         values.get("noiseReductionMode"), requestedNoiseReductionMode);
                 requestedLogProfile = booleanValue(values.get("logProfile"), requestedLogProfile);
                 requestedHlgProfile = booleanValue(values.get("hlgProfile"), requestedHlgProfile);
+                Object filmStyleObj = values.get("filmStyle");
+                if (filmStyleObj != null) requestedFilmStyle = String.valueOf(filmStyleObj);
                 updateZoomSpeedConfiguration(values);
                 Object zoom = values.get("zoomRatio");
                 if (zoom instanceof Number) {
@@ -1725,9 +1728,22 @@ public final class CameraEngine implements SensorEventListener {
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
             builder.set(CaptureRequest.TONEMAP_CURVE, createLogTonemapCurve());
         } else {
-            // Apply a "Safe" Rec.709 curve that prevents shadows from crushing in 10-bit SDR
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
-            builder.set(CaptureRequest.TONEMAP_CURVE, createSafeRec709Curve());
+            switch (requestedFilmStyle) {
+                case "Cinematic":
+                    builder.set(CaptureRequest.TONEMAP_CURVE, createCinematicCurve());
+                    break;
+                case "Fuji":
+                    builder.set(CaptureRequest.TONEMAP_CURVE, createFujiCurve());
+                    break;
+                case "Vivid":
+                    builder.set(CaptureRequest.TONEMAP_CURVE, createVividCurve());
+                    break;
+                default:
+                    // Apply a "Safe" Rec.709 curve that prevents shadows from crushing in 10-bit SDR
+                    builder.set(CaptureRequest.TONEMAP_CURVE, createSafeRec709Curve());
+                    break;
+            }
         }
     }
 

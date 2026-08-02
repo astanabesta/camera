@@ -70,7 +70,7 @@ public final class MainActivity extends FlutterActivity {
                     call.argument("locked") == Boolean.TRUE, result);
             case "runTenBitRec709Preflight" -> cameraEngine.runTenBitRec709Preflight(result);
             case "runTenBitRec709SessionTest" -> cameraEngine.runTenBitRec709SessionTest(result);
-            case "runHevcMain10RampTest" -> cameraEngine.runHevcMain10RampTest(result);
+            case "runTenBitDiagnosticRecording" -> cameraEngine.runTenBitDiagnosticRecording(result);
             case "startRecording" -> cameraEngine.startRecording(result);
             case "stopRecording" -> cameraEngine.stopRecording(result);
             case "pause" -> {

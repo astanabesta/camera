@@ -545,19 +545,19 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
       value: c.tenBitSessionResult!,
     ),
   _CustomRow(
-    title: 'HEVC Main10 Ramp Test',
+    title: 'Real P010 Main10 Diagnostic',
     trailing: SizedBox(
       height: 34,
       child: FilledButton(
-        onPressed: c.main10RampBusy ? null : c.runHevcMain10RampTest,
-        child: Text(c.main10RampBusy ? 'ENCODING' : 'RUN RAMP'),
+        onPressed: c.tenBitRecordingBusy ? null : c.runTenBitDiagnosticRecording,
+        child: Text(c.tenBitRecordingBusy ? 'ENCODING' : 'RECORD'),
       ),
     ),
   ),
-  if (c.main10RampResult != null)
+  if (c.tenBitRecordingResult != null)
     _DiagnosticResultRow(
-      title: 'HEVC Main10 Ramp',
-      value: c.main10RampResult!,
+      title: 'HEVC Main10 Diag',
+      value: c.tenBitRecordingResult!,
     ),
   const _NoticeRow(
     text:

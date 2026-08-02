@@ -238,8 +238,8 @@ class CameraUiController extends ChangeNotifier {
   String? _tenBitPreflightResult;
   bool _tenBitSessionBusy = false;
   String? _tenBitSessionResult;
-  bool _main10RampBusy = false;
-  String? _main10RampResult;
+  bool _tenBitRecordingBusy = false;
+  String? _tenBitRecordingResult;
   int _previewRotationDegrees = 0;
 
   String lens = 'MAIN';
@@ -345,8 +345,8 @@ class CameraUiController extends ChangeNotifier {
   String? get tenBitPreflightResult => _tenBitPreflightResult;
   bool get tenBitSessionBusy => _tenBitSessionBusy;
   String? get tenBitSessionResult => _tenBitSessionResult;
-  bool get main10RampBusy => _main10RampBusy;
-  String? get main10RampResult => _main10RampResult;
+  bool get tenBitRecordingBusy => _tenBitRecordingBusy;
+  String? get tenBitRecordingResult => _tenBitRecordingResult;
   String get storageAvailableLabel =>
       _formatBytes(_storageAvailableBytes, fallback: '—');
   String get storageTotalLabel =>
@@ -1058,14 +1058,14 @@ class CameraUiController extends ChangeNotifier {
     }
   }
 
-  Future<void> runHevcMain10RampTest() async {
-    if (allowSimulation || recording || _main10RampBusy) return;
-    _main10RampBusy = true;
-    _main10RampResult = null;
+  Future<void> runTenBitDiagnosticRecording() async {
+    if (allowSimulation || recording || _tenBitRecordingBusy) return;
+    _tenBitRecordingBusy = true;
+    _tenBitRecordingResult = null;
     notifyListeners();
     try {
-      final Map<Object?, Object?> result = await _nativeCamera.runHevcMain10RampTest();
-      _main10RampResult = [
+      final Map<Object?, Object?> result = await _nativeCamera.runTenBitDiagnosticRecording();
+      _tenBitRecordingResult = [
         '${result['result'] ?? 'No result returned'}',
         if (result['requestedProfile'] != null) 'Requested: ${result['requestedProfile']}',
         if (result['submittedFrames'] != null) 'Submitted: ${result['submittedFrames']}',
@@ -1073,9 +1073,9 @@ class CameraUiController extends ChangeNotifier {
         if (result['uri'] != null) 'File: ${result['uri']}',
       ].join('\n');
     } catch (error) {
-      _main10RampResult = _friendlyPlatformError(error);
+      _tenBitRecordingResult = _friendlyPlatformError(error);
     } finally {
-      _main10RampBusy = false;
+      _tenBitRecordingBusy = false;
       notifyListeners();
     }
   }

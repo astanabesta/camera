@@ -7,6 +7,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -17,10 +18,13 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.MeteringRectangle;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.BatteryManager;
@@ -428,6 +432,66 @@ public final class CameraEngine implements SensorEventListener {
      * Applies real Camera2 AF/AE metering regions in displayed-preview
      * coordinates. x and y are normalized after Flutter rotation.
      */
+    /**
+     * Capability preflight only. It does not claim that camera frames or an
+     * encoded bitstream are 10-bit; those require the later P010/Main10 ramp
+     * diagnostic.
+     */
+    public void runTenBitRec709Preflight(MethodChannel.Result result) {
+        if (!initialized || characteristics == null || cameraHandler == null) {
+            replyError(result, "NOT_READY", "Camera must be ready before running the 10-bit preflight", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            try {
+                Map<String, Object> response = new HashMap<>();
+                StreamConfigurationMap streams = characteristics.get(
+                        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                boolean p010Uhd30 = false;
+                if (streams != null && Build.VERSION.SDK_INT >= 33) {
+                    Size[] sizes = streams.getOutputSizes(ImageFormat.YCBCR_P010);
+                    if (sizes != null) {
+                        for (Size size : sizes) {
+                            if (size.getWidth() == 3840 && size.getHeight() == 2160) {
+                                long duration = streams.getOutputMinFrameDuration(
+                                        ImageFormat.YCBCR_P010, size);
+                                p010Uhd30 = duration > 0 && duration <= 33_333_334L;
+                                break;
+                            }
+                        }
+                    }
+                }
+                boolean hevcEncoder = false;
+                boolean main10Advertised = false;
+                for (MediaCodecInfo codec : new MediaCodecList(
+                        MediaCodecList.ALL_CODECS).getCodecInfos()) {
+                    if (!codec.isEncoder()) continue;
+                    for (String type : codec.getSupportedTypes()) {
+                        if (!"video/hevc".equalsIgnoreCase(type)) continue;
+                        hevcEncoder = true;
+                        MediaCodecInfo.CodecCapabilities caps = codec.getCapabilitiesForType(type);
+                        for (MediaCodecInfo.CodecProfileLevel level : caps.profileLevels) {
+                            if (level.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10) {
+                                main10Advertised = true;
+                            }
+                        }
+                    }
+                }
+                response.put("p010Uhd30Advertised", p010Uhd30);
+                response.put("hevcEncoderFound", hevcEncoder);
+                response.put("hevcMain10Advertised", main10Advertised);
+                response.put("result", p010Uhd30 && hevcEncoder
+                        ? "PROMISING — actual P010/Main10 encode test required"
+                        : "BLOCKED — required public capability is absent");
+                response.put("nextGate", "Run actual P010 camera session and encoded ramp test");
+                replySuccess(result, response);
+            } catch (Throwable error) {
+                replyError(result, "TEN_BIT_PREFLIGHT_FAILED",
+                        "Unable to inspect 10-bit Rec.709 capabilities", error);
+            }
+        });
+    }
+
     public void tapToFocus(Map<String, Object> values, MethodChannel.Result result) {
         if (!initialized || cameraHandler == null) {
             replyError(result, "NOT_READY", "Camera is not initialized", null);

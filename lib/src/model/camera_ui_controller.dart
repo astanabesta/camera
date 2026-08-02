@@ -234,6 +234,8 @@ class CameraUiController extends ChangeNotifier {
   int? _actualNoiseReductionMode;
   int? _actualOisMode;
   int? _actualVideoStabilizationMode;
+  bool _tenBitPreflightBusy = false;
+  String? _tenBitPreflightResult;
   int _previewRotationDegrees = 0;
 
   String lens = 'MAIN';
@@ -335,6 +337,8 @@ class CameraUiController extends ChangeNotifier {
   int? get actualNoiseReductionMode => _actualNoiseReductionMode;
   int? get actualOisMode => _actualOisMode;
   int? get actualVideoStabilizationMode => _actualVideoStabilizationMode;
+  bool get tenBitPreflightBusy => _tenBitPreflightBusy;
+  String? get tenBitPreflightResult => _tenBitPreflightResult;
   String get storageAvailableLabel =>
       _formatBytes(_storageAvailableBytes, fallback: '—');
   String get storageTotalLabel =>
@@ -1002,6 +1006,23 @@ class CameraUiController extends ChangeNotifier {
   void setHapticControlFeedback(bool value) {
     _hapticControlFeedback = value;
     notifyListeners();
+  }
+
+  Future<void> runTenBitRec709Preflight() async {
+    if (allowSimulation || !cameraReady || _tenBitPreflightBusy) return;
+    _tenBitPreflightBusy = true;
+    _tenBitPreflightResult = null;
+    notifyListeners();
+    try {
+      final Map<Object?, Object?> result =
+          await _nativeCamera.runTenBitRec709Preflight();
+      _tenBitPreflightResult = '${result['result'] ?? 'No result returned'}';
+    } catch (error) {
+      _tenBitPreflightResult = _friendlyPlatformError(error);
+    } finally {
+      _tenBitPreflightBusy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> toggleRecording() async {

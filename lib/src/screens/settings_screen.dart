@@ -514,6 +514,22 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
     value: c.actualNoiseReductionLabel,
     chevron: false,
   ),
+  _CustomRow(
+    title: '10-Bit Rec.709 Preflight',
+    trailing: SizedBox(
+      height: 34,
+      child: FilledButton(
+        onPressed: c.tenBitPreflightBusy ? null : c.runTenBitRec709Preflight,
+        child: Text(c.tenBitPreflightBusy ? 'CHECKING' : 'RUN CHECK'),
+      ),
+    ),
+  ),
+  if (c.tenBitPreflightResult != null)
+    _ValueRow(
+      title: '10-Bit Result',
+      value: c.tenBitPreflightResult!,
+      chevron: false,
+    ),
   const _NoticeRow(
     text:
         'Requested values are only confirmed when the Camera2 capture result matches.',

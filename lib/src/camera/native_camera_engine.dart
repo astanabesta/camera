@@ -116,6 +116,10 @@ class NativeCameraEngine {
     return _invokeMap('setAeAfLock', <String, Object>{'locked': locked});
   }
 
+  Future<Map<Object?, Object?>> runTenBitRec709Preflight() {
+    return _invokeMap('runTenBitRec709Preflight', null);
+  }
+
   Future<Map<Object?, Object?>> startRecording() {
     return _invokeMap('startRecording', null);
   }

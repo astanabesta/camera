@@ -1282,7 +1282,8 @@ public final class CameraEngine implements SensorEventListener {
                     try {
                         Image image = reader.acquireNextImage();
                         if (image != null) {
-                            if (p010Writer != null) {
+                            if (p010Writer != null && recording) {
+                                image.setTimestamp(System.nanoTime());
                                 p010Writer.queueInputImage(image);
                             } else {
                                 image.close();

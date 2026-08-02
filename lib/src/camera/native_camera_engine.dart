@@ -120,6 +120,10 @@ class NativeCameraEngine {
     return _invokeMap('runTenBitRec709Preflight', null);
   }
 
+  Future<Map<Object?, Object?>> runTenBitRec709SessionTest() {
+    return _invokeMap('runTenBitRec709SessionTest', null);
+  }
+
   Future<Map<Object?, Object?>> startRecording() {
     return _invokeMap('startRecording', null);
   }

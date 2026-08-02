@@ -236,6 +236,8 @@ class CameraUiController extends ChangeNotifier {
   int? _actualVideoStabilizationMode;
   bool _tenBitPreflightBusy = false;
   String? _tenBitPreflightResult;
+  bool _tenBitSessionBusy = false;
+  String? _tenBitSessionResult;
   int _previewRotationDegrees = 0;
 
   String lens = 'MAIN';
@@ -339,6 +341,8 @@ class CameraUiController extends ChangeNotifier {
   int? get actualVideoStabilizationMode => _actualVideoStabilizationMode;
   bool get tenBitPreflightBusy => _tenBitPreflightBusy;
   String? get tenBitPreflightResult => _tenBitPreflightResult;
+  bool get tenBitSessionBusy => _tenBitSessionBusy;
+  String? get tenBitSessionResult => _tenBitSessionResult;
   String get storageAvailableLabel =>
       _formatBytes(_storageAvailableBytes, fallback: '—');
   String get storageTotalLabel =>
@@ -1021,6 +1025,23 @@ class CameraUiController extends ChangeNotifier {
       _tenBitPreflightResult = _friendlyPlatformError(error);
     } finally {
       _tenBitPreflightBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> runTenBitRec709SessionTest() async {
+    if (allowSimulation || !cameraReady || recording || _tenBitSessionBusy) return;
+    _tenBitSessionBusy = true;
+    _tenBitSessionResult = null;
+    notifyListeners();
+    try {
+      final Map<Object?, Object?> result =
+          await _nativeCamera.runTenBitRec709SessionTest();
+      _tenBitSessionResult = '${result['result'] ?? 'No result returned'}';
+    } catch (error) {
+      _tenBitSessionResult = _friendlyPlatformError(error);
+    } finally {
+      _tenBitSessionBusy = false;
       notifyListeners();
     }
   }

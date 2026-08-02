@@ -23,6 +23,8 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.media.Image;
+import android.media.ImageReader;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaRecorder;
@@ -488,6 +490,101 @@ public final class CameraEngine implements SensorEventListener {
             } catch (Throwable error) {
                 replyError(result, "TEN_BIT_PREFLIGHT_FAILED",
                         "Unable to inspect 10-bit Rec.709 capabilities", error);
+            }
+        });
+    }
+
+    /**
+     * Step 2: create a real STANDARD-dynamic-range P010 session and acquire
+     * one frame. This intentionally does not encode anything yet.
+     */
+    public void runTenBitRec709SessionTest(MethodChannel.Result result) {
+        if (!initialized || cameraDevice == null || cameraHandler == null || recording) {
+            replyError(result, "NOT_READY",
+                    "Camera must be ready and not recording for the P010 session test", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            if (Build.VERSION.SDK_INT < 33) {
+                replyError(result, "UNSUPPORTED", "P010 requires Android 13 or later", null);
+                return;
+            }
+            final AtomicBoolean replied = new AtomicBoolean(false);
+            final ImageReader reader;
+            final Surface sessionPreview;
+            try {
+                reader = ImageReader.newInstance(3840, 2160, ImageFormat.YCBCR_P010, 2);
+                sessionPreview = obtainPreviewSurface();
+                closeSession();
+            } catch (Throwable error) {
+                replyError(result, "P010_SETUP_FAILED", "Unable to create P010 test surfaces", error);
+                return;
+            }
+            final Runnable restorePreview = () -> {
+                try { reader.close(); } catch (Throwable ignored) {}
+                if (cameraDevice != null && !disposed.get() && !recording) createPreviewSession();
+            };
+            reader.setOnImageAvailableListener(source -> {
+                Image image = null;
+                try {
+                    image = source.acquireLatestImage();
+                    if (image == null || !replied.compareAndSet(false, true)) return;
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("session", "PASS");
+                    response.put("frame", "PASS");
+                    response.put("format", image.getFormat());
+                    response.put("width", image.getWidth());
+                    response.put("height", image.getHeight());
+                    response.put("result", "P010 UHD frame received — encoder ramp test required");
+                    replySuccess(result, response);
+                    cameraHandler.post(restorePreview);
+                } catch (Throwable error) {
+                    if (replied.compareAndSet(false, true)) {
+                        replyError(result, "P010_FRAME_FAILED", "P010 session opened but frame acquisition failed", error);
+                        cameraHandler.post(restorePreview);
+                    }
+                } finally {
+                    if (image != null) image.close();
+                }
+            }, cameraHandler);
+            try {
+                cameraDevice.createCaptureSession(Arrays.asList(sessionPreview, reader.getSurface()),
+                        new CameraCaptureSession.StateCallback() {
+                            @Override public void onConfigured(CameraCaptureSession session) {
+                                if (cameraDevice == null || disposed.get()) { session.close(); return; }
+                                try {
+                                    captureSession = session;
+                                    CaptureRequest.Builder request = cameraDevice.createCaptureRequest(
+                                            CameraDevice.TEMPLATE_PREVIEW);
+                                    request.addTarget(sessionPreview);
+                                    request.addTarget(reader.getSurface());
+                                    applyControls(request);
+                                    session.capture(request.build(), captureCallback, cameraHandler);
+                                } catch (Throwable error) {
+                                    if (replied.compareAndSet(false, true)) {
+                                        replyError(result, "P010_CAPTURE_FAILED", "Unable to capture P010 test frame", error);
+                                        restorePreview.run();
+                                    }
+                                }
+                            }
+                            @Override public void onConfigureFailed(CameraCaptureSession session) {
+                                if (replied.compareAndSet(false, true)) {
+                                    replyError(result, "P010_SESSION_FAILED", "Camera2 rejected the UHD P010 session", null);
+                                    restorePreview.run();
+                                }
+                            }
+                        }, cameraHandler);
+                cameraHandler.postDelayed(() -> {
+                    if (replied.compareAndSet(false, true)) {
+                        replyError(result, "P010_TIMEOUT", "No UHD P010 frame arrived within 3 seconds", null);
+                        restorePreview.run();
+                    }
+                }, 3000);
+            } catch (Throwable error) {
+                if (replied.compareAndSet(false, true)) {
+                    replyError(result, "P010_SESSION_FAILED", "Unable to create UHD P010 session", error);
+                    restorePreview.run();
+                }
             }
         });
     }

@@ -69,6 +69,7 @@ public final class MainActivity extends FlutterActivity {
             case "setAeAfLock" -> cameraEngine.setAeAfLock(
                     call.argument("locked") == Boolean.TRUE, result);
             case "runTenBitRec709Preflight" -> cameraEngine.runTenBitRec709Preflight(result);
+            case "runTenBitRec709SessionTest" -> cameraEngine.runTenBitRec709SessionTest(result);
             case "startRecording" -> cameraEngine.startRecording(result);
             case "stopRecording" -> cameraEngine.stopRecording(result);
             case "pause" -> {

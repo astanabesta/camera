@@ -526,8 +526,24 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
   ),
   if (c.tenBitPreflightResult != null)
     _ValueRow(
-      title: '10-Bit Result',
+      title: '10-Bit Preflight',
       value: c.tenBitPreflightResult!,
+      chevron: false,
+    ),
+  _CustomRow(
+    title: 'P010 UHD Session Test',
+    trailing: SizedBox(
+      height: 34,
+      child: FilledButton(
+        onPressed: c.tenBitSessionBusy ? null : c.runTenBitRec709SessionTest,
+        child: Text(c.tenBitSessionBusy ? 'TESTING' : 'RUN TEST'),
+      ),
+    ),
+  ),
+  if (c.tenBitSessionResult != null)
+    _ValueRow(
+      title: 'P010 Session',
+      value: c.tenBitSessionResult!,
       chevron: false,
     ),
   const _NoticeRow(

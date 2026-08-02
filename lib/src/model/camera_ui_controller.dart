@@ -667,14 +667,14 @@ class CameraUiController extends ChangeNotifier {
     if (_recording || _logProfile == value) return;
     _logProfile = value;
     notifyListeners();
-    _applyControls();
+    _scheduleNativeControlApply();
   }
 
   void setRecordBitDepth(RecordBitDepth value) {
     if (_recording || _recordBitDepth == value) return;
     _recordBitDepth = value;
     notifyListeners();
-    _applyControls();
+    _scheduleNativeControlApply();
   }
 
   void setBitratePreset(BitratePreset value) {

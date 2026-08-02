@@ -55,7 +55,8 @@ enum RecordingMode {
 
 enum RecordBitDepth {
   eightBit('8-bit SDR', 8),
-  tenBit('10-bit SDR', 10);
+  tenBit('10-bit SDR', 10),
+  hlg10('10-bit HLG (HDR)', 10);
 
   const RecordBitDepth(this.label, this.depth);
   final String label;
@@ -1266,6 +1267,7 @@ class CameraUiController extends ChangeNotifier {
         'recordHeight': _recordingMode.height,
         'recordFps': _recordingMode.fps,
         'recordBitDepth': _recordBitDepth.depth,
+        'hlgProfile': _recordBitDepth == RecordBitDepth.hlg10,
         'logProfile': _logProfile,
         'videoBitRate': _bitratePreset.bitsPerSecond,
         'stabilizationMode': _stabilizationMode.nativeValue,

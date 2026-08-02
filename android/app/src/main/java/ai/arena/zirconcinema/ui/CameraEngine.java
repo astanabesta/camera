@@ -20,6 +20,10 @@ import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.hardware.camera2.params.TonemapCurve;
+import android.hardware.camera2.params.DynamicRangeProfiles;
+import android.hardware.camera2.params.SessionConfiguration;
+import android.hardware.camera2.params.OutputConfiguration;
+import java.util.concurrent.Executor;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -143,6 +147,7 @@ public final class CameraEngine implements SensorEventListener {
     private int requestedVideoBitRate = DEFAULT_VIDEO_BIT_RATE;
     private int requestedBitDepth = 10;
     private boolean requestedLogProfile = false;
+    private boolean requestedHlgProfile = false;
     // 0=off, 1=optical, 2=electronic.
     private int requestedStabilizationMode = 1;
     private MeteringRectangle[] requestedAfRegions;
@@ -289,6 +294,7 @@ public final class CameraEngine implements SensorEventListener {
                 requestedNoiseReductionMode = intValue(
                         values.get("noiseReductionMode"), requestedNoiseReductionMode);
                 requestedLogProfile = booleanValue(values.get("logProfile"), requestedLogProfile);
+                requestedHlgProfile = booleanValue(values.get("hlgProfile"), requestedHlgProfile);
                 updateZoomSpeedConfiguration(values);
                 Object zoom = values.get("zoomRatio");
                 if (zoom instanceof Number) {
@@ -1304,51 +1310,79 @@ public final class CameraEngine implements SensorEventListener {
 
         final Surface finalTargetSurface = cameraTargetSurface;
 
-        cameraDevice.createCaptureSession(
-                Arrays.asList(sessionPreviewSurface, finalTargetSurface),
-                new CameraCaptureSession.StateCallback() {
-                    @Override
-                    public void onConfigured(CameraCaptureSession session) {
-                        if (cameraDevice == null || mediaRecorder == null) {
-                            session.close();
-                            failRecordStart("Recorder was released during session setup", null);
-                            return;
-                        }
-                        captureSession = session;
-                        try {
-                            repeatingBuilder = cameraDevice.createCaptureRequest(
-                                    CameraDevice.TEMPLATE_RECORD);
-                            repeatingBuilder.addTarget(sessionPreviewSurface);
-                            repeatingBuilder.addTarget(finalTargetSurface);
-                            applyControls(repeatingBuilder);
-                            captureSession.setRepeatingRequest(
-                                    repeatingBuilder.build(), captureCallback, cameraHandler);
-                            mediaRecorder.start();
-                            recording = true;
-                            emitState("recording", recordingUri == null ? null : recordingUri.toString());
-                            Map<String, Object> response = new HashMap<>();
-                            response.put("recording", true);
-                            response.put("uri", recordingUri == null ? null : recordingUri.toString());
-                            response.put("width", requestedRecordWidth);
-                            response.put("height", requestedRecordHeight);
-                            response.put("fps", requestedRecordFps);
-                            response.put("codec", requestedBitDepth == 10 ? "HEVC Main10 10-bit (Zero-Copy)" : "HEVC Main 8-bit");
-                            response.put("videoBitRate", requestedVideoBitRate);
-                            response.put("audio", "AAC 48kHz");
-                            MethodChannel.Result pending = pendingRecordStartResult;
-                            pendingRecordStartResult = null;
-                            replySuccess(pending, response);
-                        } catch (Throwable error) {
-                            failRecordStart("Unable to start MediaRecorder", error);
-                        }
+        
+        CameraCaptureSession.StateCallback stateCallback = new CameraCaptureSession.StateCallback() {
+            @Override
+            public void onConfigured(CameraCaptureSession session) {
+                if (cameraDevice == null || mediaRecorder == null) {
+                    session.close();
+                    failRecordStart("Recorder was released during session setup", null);
+                    return;
+                }
+                captureSession = session;
+                try {
+                    repeatingBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                    repeatingBuilder.addTarget(sessionPreviewSurface);
+                    repeatingBuilder.addTarget(finalTargetSurface);
+                    
+                    // If HLG is requested, Camera2 handles the tonemap profile itself (HLG10 dynamic range)
+                    applyControls(repeatingBuilder);
+                    
+                    captureSession.setRepeatingRequest(repeatingBuilder.build(), captureCallback, cameraHandler);
+                    mediaRecorder.start();
+                    recording = true;
+                    emitState("recording", recordingUri == null ? null : recordingUri.toString());
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("recording", true);
+                    response.put("uri", recordingUri == null ? null : recordingUri.toString());
+                    response.put("width", requestedRecordWidth);
+                    response.put("height", requestedRecordHeight);
+                    response.put("fps", requestedRecordFps);
+                    
+                    String codecStr = "HEVC Main 8-bit";
+                    if (requestedBitDepth == 10) {
+                        codecStr = requestedHlgProfile ? "HEVC Main10 HLG (BT.2020)" : "HEVC Main10 10-bit SDR";
                     }
+                    response.put("codec", codecStr);
+                    
+                    response.put("videoBitRate", requestedVideoBitRate);
+                    response.put("audio", "AAC 48kHz");
+                    MethodChannel.Result pending = pendingRecordStartResult;
+                    pendingRecordStartResult = null;
+                    replySuccess(pending, response);
+                } catch (Throwable error) {
+                    failRecordStart("Unable to start MediaRecorder", error);
+                }
+            }
 
-                    @Override
-                    public void onConfigureFailed(CameraCaptureSession session) {
-                        failRecordStart("Camera2 UHD recording session configuration failed", null);
-                    }
-                },
-                cameraHandler);
+            @Override
+            public void onConfigureFailed(CameraCaptureSession session) {
+                failRecordStart("Camera2 UHD recording session configuration failed", null);
+            }
+        };
+
+        if (Build.VERSION.SDK_INT >= 33 && requestedHlgProfile) {
+            OutputConfiguration previewConfig = new OutputConfiguration(sessionPreviewSurface);
+            OutputConfiguration recordConfig = new OutputConfiguration(finalTargetSurface);
+            recordConfig.setDynamicRangeProfile(DynamicRangeProfiles.HLG10);
+            previewConfig.setDynamicRangeProfile(DynamicRangeProfiles.HLG10);
+            
+            SessionConfiguration sessionConfig = new SessionConfiguration(
+                    SessionConfiguration.SESSION_REGULAR,
+                    Arrays.asList(previewConfig, recordConfig),
+                    new Executor() {
+                        @Override
+                        public void execute(Runnable command) {
+                            cameraHandler.post(command);
+                        }
+                    },
+                    stateCallback);
+            cameraDevice.createCaptureSession(sessionConfig);
+        } else {
+            cameraDevice.createCaptureSession(
+                    Arrays.asList(sessionPreviewSurface, finalTargetSurface),
+                    stateCallback, cameraHandler);
+        }
     }
 
     private final CameraCaptureSession.CaptureCallback captureCallback =
@@ -1672,7 +1706,10 @@ public final class CameraEngine implements SensorEventListener {
         builder.set(CaptureRequest.CONTROL_AWB_MODE,
                 whiteBalanceMode(requestedWhiteBalance));
                 
-        if (requestedLogProfile) {
+        if (requestedHlgProfile && Build.VERSION.SDK_INT >= 33) {
+            // HLG handles its own tonemapping via the DynamicRangeProfile
+            // Do not override TONEMAP_MODE
+        } else if (requestedLogProfile) {
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
             builder.set(CaptureRequest.TONEMAP_CURVE, createLogTonemapCurve());
         } else {

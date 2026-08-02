@@ -544,6 +544,21 @@ List<Widget> _processingRows(CameraUiController c) => <Widget>[
       title: 'P010 Session',
       value: c.tenBitSessionResult!,
     ),
+  _CustomRow(
+    title: 'HEVC Main10 Ramp Test',
+    trailing: SizedBox(
+      height: 34,
+      child: FilledButton(
+        onPressed: c.main10RampBusy ? null : c.runHevcMain10RampTest,
+        child: Text(c.main10RampBusy ? 'ENCODING' : 'RUN RAMP'),
+      ),
+    ),
+  ),
+  if (c.main10RampResult != null)
+    _DiagnosticResultRow(
+      title: 'HEVC Main10 Ramp',
+      value: c.main10RampResult!,
+    ),
   const _NoticeRow(
     text:
         'Requested values are only confirmed when the Camera2 capture result matches.',

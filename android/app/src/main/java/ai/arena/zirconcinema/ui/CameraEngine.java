@@ -25,8 +25,11 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.BatteryManager;
@@ -52,6 +55,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.flutter.plugin.common.MethodChannel;
@@ -611,6 +616,114 @@ public final class CameraEngine implements SensorEventListener {
                 }
             }
         });
+    }
+
+    /** Step 3: encode a known 10-bit P010 ramp and preserve the MP4 for inspection. */
+    public void runHevcMain10RampTest(MethodChannel.Result result) {
+        if (cameraHandler == null || recording) {
+            replyError(result, "NOT_READY", "Stop recording before running the Main10 ramp test", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            final int width = 256, height = 256, frameCount = 30, fps = 30;
+            MediaCodec codec = null;
+            MediaMuxer muxer = null;
+            ParcelFileDescriptor fd = null;
+            Uri uri = null;
+            boolean muxerStarted = false;
+            int track = -1, submitted = 0, encoded = 0;
+            try {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Video.Media.DISPLAY_NAME,
+                        "ZC_Main10_P010_Ramp_" + System.currentTimeMillis() + ".mp4");
+                values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+                values.put(MediaStore.Video.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_MOVIES + "/ZirconCinema/Diagnostics");
+                values.put(MediaStore.Video.Media.IS_PENDING, 1);
+                uri = activity.getContentResolver().insert(
+                        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values);
+                if (uri == null) throw new IOException("MediaStore insert failed");
+                fd = activity.getContentResolver().openFileDescriptor(uri, "rw");
+                if (fd == null) throw new IOException("Unable to open diagnostic output");
+
+                MediaFormat format = MediaFormat.createVideoFormat("video/hevc", width, height);
+                format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
+                        MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010);
+                format.setInteger(MediaFormat.KEY_PROFILE,
+                        MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10);
+                format.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+                format.setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000);
+                format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+                codec = MediaCodec.createEncoderByType("video/hevc");
+                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                codec.start();
+                muxer = new MediaMuxer(fd.getFileDescriptor(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+                boolean inputDone = false, outputDone = false;
+                long deadline = SystemClock.elapsedRealtime() + 8000;
+                while (!outputDone && SystemClock.elapsedRealtime() < deadline) {
+                    if (!inputDone) {
+                        int index = codec.dequeueInputBuffer(10_000);
+                        if (index >= 0) {
+                            ByteBuffer input = codec.getInputBuffer(index);
+                            if (submitted < frameCount) {
+                                fillP010Ramp(input, width, height, submitted);
+                                codec.queueInputBuffer(index, 0, width * height * 3,
+                                        submitted * 1_000_000L / fps, 0);
+                                submitted++;
+                            } else {
+                                codec.queueInputBuffer(index, 0, 0,
+                                        frameCount * 1_000_000L / fps,
+                                        MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                                inputDone = true;
+                            }
+                        }
+                    }
+                    int output = codec.dequeueOutputBuffer(info, 10_000);
+                    if (output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        track = muxer.addTrack(codec.getOutputFormat());
+                        muxer.start(); muxerStarted = true;
+                    } else if (output >= 0) {
+                        ByteBuffer data = codec.getOutputBuffer(output);
+                        if (data != null && info.size > 0 && muxerStarted) {
+                            data.position(info.offset); data.limit(info.offset + info.size);
+                            muxer.writeSampleData(track, data, info); encoded++;
+                        }
+                        outputDone = (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
+                        codec.releaseOutputBuffer(output, false);
+                    }
+                }
+                if (!outputDone) throw new IOException("Encoder timed out before EOS");
+                Map<String, Object> response = new HashMap<>();
+                response.put("requestedProfile", "HEVC Main10");
+                response.put("input", "P010 10-bit ramp 256x256");
+                response.put("submittedFrames", submitted);
+                response.put("encodedFrames", encoded);
+                response.put("uri", uri.toString());
+                response.put("result", "Main10 ramp MP4 created — inspect bitstream with MediaInfo/ffprobe");
+                replySuccess(result, response);
+                ContentValues done = new ContentValues(); done.put(MediaStore.Video.Media.IS_PENDING, 0);
+                activity.getContentResolver().update(uri, done, null, null);
+            } catch (Throwable error) {
+                if (uri != null) activity.getContentResolver().delete(uri, null, null);
+                replyError(result, "MAIN10_RAMP_FAILED", "HEVC Main10 P010 ramp encode failed", error);
+            } finally {
+                try { if (muxer != null) { if (muxerStarted) muxer.stop(); muxer.release(); } } catch (Throwable ignored) {}
+                try { if (codec != null) { codec.stop(); codec.release(); } } catch (Throwable ignored) {}
+                try { if (fd != null) fd.close(); } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    private static void fillP010Ramp(ByteBuffer buffer, int width, int height, int frame) {
+        buffer.clear(); buffer.order(ByteOrder.nativeOrder());
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
+            int value = (x * 1023 / (width - 1) + frame * 7) & 1023;
+            buffer.putShort((short) (value << 6));
+        }
+        for (int y = 0; y < height / 2; y++) for (int x = 0; x < width; x += 2) {
+            buffer.putShort((short) (512 << 6)); buffer.putShort((short) (512 << 6));
+        }
     }
 
     public void tapToFocus(Map<String, Object> values, MethodChannel.Result result) {

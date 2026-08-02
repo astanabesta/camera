@@ -1725,7 +1725,9 @@ public final class CameraEngine implements SensorEventListener {
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
             builder.set(CaptureRequest.TONEMAP_CURVE, createLogTonemapCurve());
         } else {
-            builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
+            // Apply a "Safe" Rec.709 curve that prevents shadows from crushing in 10-bit SDR
+            builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
+            builder.set(CaptureRequest.TONEMAP_CURVE, createSafeRec709Curve());
         }
     }
 

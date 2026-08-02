@@ -149,6 +149,8 @@ public final class CameraEngine implements SensorEventListener {
     private boolean requestedLogProfile = false;
     private boolean requestedHlgProfile = false;
     private String requestedFilmStyle = "Standard";
+    private float shadowLift = 0.0f;
+    private float highlightRollOff = 0.0f;
     // 0=off, 1=optical, 2=electronic.
     private int requestedStabilizationMode = 1;
     private MeteringRectangle[] requestedAfRegions;
@@ -298,6 +300,8 @@ public final class CameraEngine implements SensorEventListener {
                 requestedHlgProfile = booleanValue(values.get("hlgProfile"), requestedHlgProfile);
                 Object filmStyleObj = values.get("filmStyle");
                 if (filmStyleObj != null) requestedFilmStyle = String.valueOf(filmStyleObj);
+                shadowLift = floatValue(values.get("shadowLift"), shadowLift);
+                highlightRollOff = floatValue(values.get("highlightRollOff"), highlightRollOff);
                 updateZoomSpeedConfiguration(values);
                 Object zoom = values.get("zoomRatio");
                 if (zoom instanceof Number) {

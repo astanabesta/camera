@@ -262,6 +262,8 @@ class CameraUiController extends ChangeNotifier {
   RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
   bool _logProfile = false;
   FilmStyle _filmStyle = FilmStyle.standard;
+  double _shadowLift = 0.0;
+  double _highlightRollOff = 0.0;
   BitratePreset _bitratePreset = BitratePreset.high;
   StabilizationMode _stabilizationMode = StabilizationMode.optical;
   ZoomSpeed _zoomSpeed = ZoomSpeed.slow;
@@ -372,6 +374,8 @@ class CameraUiController extends ChangeNotifier {
   RecordBitDepth get recordBitDepth => _recordBitDepth;
   bool get logProfile => _logProfile;
   FilmStyle get filmStyle => _filmStyle;
+  double get shadowLift => _shadowLift;
+  double get highlightRollOff => _highlightRollOff;
   BitratePreset get bitratePreset => _bitratePreset;
   StabilizationMode get stabilizationMode => _stabilizationMode;
   ZoomSpeed get zoomSpeed => _zoomSpeed;
@@ -689,6 +693,21 @@ class CameraUiController extends ChangeNotifier {
   
   
   
+  
+  void setShadowLift(double value) {
+    if (_recording || _shadowLift == value) return;
+    _shadowLift = value;
+    notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
+  void setHighlightRollOff(double value) {
+    if (_recording || _highlightRollOff == value) return;
+    _highlightRollOff = value;
+    notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
   void setFilmStyle(FilmStyle value) {
     if (_recording || _filmStyle == value) return;
     _filmStyle = value;
@@ -1303,6 +1322,8 @@ class CameraUiController extends ChangeNotifier {
         'logProfile': _logProfile,
         'filmStyle': _filmStyle.index,
         'filmStyle': _filmStyle.camera2Value,
+        'shadowLift': _shadowLift,
+        'highlightRollOff': _highlightRollOff,
         'videoBitRate': _bitratePreset.bitsPerSecond,
         'stabilizationMode': _stabilizationMode.nativeValue,
         'zoomTargetRateStopsPerSecond': _zoomSpeed.targetRateStopsPerSecond,

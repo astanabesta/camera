@@ -1047,6 +1047,7 @@ class CameraUiController extends ChangeNotifier {
         if (result['width'] != null && result['height'] != null)
           'Size: ${result['width']}×${result['height']}',
         if (result['planes'] != null) 'Planes: ${result['planes']}',
+        if (result['planeLayout'] != null) 'Layout: ${result['planeLayout']}',
         if (result['validFrames'] != null) 'Valid frames: ${result['validFrames']}',
       ].join('\n');
     } catch (error) {

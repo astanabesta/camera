@@ -552,13 +552,24 @@ public final class CameraEngine implements SensorEventListener {
                     lastTimestampNs[0] = timestamp;
                     validFrames[0]++;
                     if (validFrames[0] >= 30 && replied.compareAndSet(false, true)) {
+                        StringBuilder planeLayout = new StringBuilder();
+                        Image.Plane[] planes = image.getPlanes();
+                        for (int plane = 0; plane < planes.length; plane++) {
+                            if (plane > 0) planeLayout.append(" | ");
+                            Image.Plane value = planes[plane];
+                            planeLayout.append("P").append(plane)
+                                    .append(" row=").append(value.getRowStride())
+                                    .append(" px=").append(value.getPixelStride())
+                                    .append(" bytes=").append(value.getBuffer().remaining());
+                        }
                         Map<String, Object> response = new HashMap<>();
                         response.put("session", "PASS");
                         response.put("frame", "PASS");
                         response.put("format", image.getFormat());
                         response.put("width", image.getWidth());
                         response.put("height", image.getHeight());
-                        response.put("planes", image.getPlanes().length);
+                        response.put("planes", planes.length);
+                        response.put("planeLayout", planeLayout.toString());
                         response.put("validFrames", validFrames[0]);
                         response.put("firstTimestampNs", firstTimestampNs[0]);
                         response.put("lastTimestampNs", lastTimestampNs[0]);

@@ -213,6 +213,7 @@ class CameraUiController extends ChangeNotifier {
   String _manualWhiteBalance = '5600K';
   Offset? _focusPoint;
   FocusUiState _focusUiState = FocusUiState.hidden;
+  Timer? _focusIndicatorTimer;
   bool _aeAfLocked = false;
   int? _actualAfState;
   CaptureOrientation? _orientationPreference;
@@ -886,6 +887,17 @@ class CameraUiController extends ChangeNotifier {
     _scheduleNativeControlApply();
   }
 
+  void _scheduleFocusIndicatorDismiss({Duration delay = const Duration(milliseconds: 900)}) {
+    _focusIndicatorTimer?.cancel();
+    if (_aeAfLocked) return;
+    _focusIndicatorTimer = Timer(delay, () {
+      if (_aeAfLocked) return;
+      _focusUiState = FocusUiState.hidden;
+      _focusPoint = null;
+      notifyListeners();
+    });
+  }
+
   Future<void> tapToFocus(
     double normalizedX,
     double normalizedY, {
@@ -894,6 +906,7 @@ class CameraUiController extends ChangeNotifier {
     if (controlsLocked || !cameraReady) return;
     final double x = normalizedX.clamp(0.0, 1.0).toDouble();
     final double y = normalizedY.clamp(0.0, 1.0).toDouble();
+    _focusIndicatorTimer?.cancel();
     _focusPoint = Offset(x, y);
     _focusUiState = FocusUiState.scanning;
     _aeAfLocked = lock;
@@ -902,6 +915,7 @@ class CameraUiController extends ChangeNotifier {
     if (allowSimulation) {
       await Future<void>.delayed(const Duration(milliseconds: 180));
       _focusUiState = lock ? FocusUiState.locked : FocusUiState.focused;
+      _scheduleFocusIndicatorDismiss();
       notifyListeners();
       return;
     }
@@ -911,6 +925,7 @@ class CameraUiController extends ChangeNotifier {
       await _nativeCamera.tapToFocus(x: x, y: y, lock: lock);
     } catch (error) {
       _focusUiState = FocusUiState.failed;
+      _scheduleFocusIndicatorDismiss(delay: const Duration(milliseconds: 1200));
       _cameraError = _friendlyPlatformError(error);
       notifyListeners();
     }
@@ -921,6 +936,7 @@ class CameraUiController extends ChangeNotifier {
     _aeAfLocked = locked;
     if (_focusPoint != null) {
       _focusUiState = locked ? FocusUiState.locked : FocusUiState.focused;
+      if (!locked) _scheduleFocusIndicatorDismiss();
     }
     notifyListeners();
     if (allowSimulation) return;
@@ -1189,12 +1205,27 @@ class CameraUiController extends ChangeNotifier {
       if (pointX is num && pointY is num) {
         _focusPoint = Offset(pointX.toDouble(), pointY.toDouble());
       }
-      _focusUiState = switch (_actualAfState) {
-        1 || 3 => FocusUiState.scanning,
-        2 || 4 => _aeAfLocked ? FocusUiState.locked : FocusUiState.focused,
-        5 || 6 => FocusUiState.failed,
-        _ => _focusUiState,
-      };
+      // Only react to AF results while a user tap is actively being resolved.
+      // Continuous-video AF keeps reporting focused states after the operator
+      // reframes; it must not resurrect an old tap marker.
+      if (_focusUiState == FocusUiState.scanning || _aeAfLocked) {
+        final FocusUiState nextFocusState = switch (_actualAfState) {
+          1 || 3 => FocusUiState.scanning,
+          2 || 4 => _aeAfLocked ? FocusUiState.locked : FocusUiState.focused,
+          5 || 6 => FocusUiState.failed,
+          _ => _focusUiState,
+        };
+        if (nextFocusState != _focusUiState) {
+          _focusUiState = nextFocusState;
+          if (nextFocusState == FocusUiState.focused) {
+            _scheduleFocusIndicatorDismiss();
+          } else if (nextFocusState == FocusUiState.failed) {
+            _scheduleFocusIndicatorDismiss(
+              delay: const Duration(milliseconds: 1200),
+            );
+          }
+        }
+      }
       _batteryPercent = _eventInt(event['batteryPercent']) ?? _batteryPercent;
       final Object? charging = event['batteryCharging'];
       if (charging is bool) _batteryCharging = charging;
@@ -1238,6 +1269,7 @@ class CameraUiController extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _focusIndicatorTimer?.cancel();
     _recordingClock.dispose();
     _controlApplyDebounce?.cancel();
     unawaited(_cameraEvents?.cancel());

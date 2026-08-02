@@ -20,7 +20,10 @@ class PreviewOverlays extends StatelessWidget {
           showPeaking: controller.isToolEnabled(MonitorTool.peaking),
           guideRatio: controller.guideRatio.value,
         ),
-        child: const Center(child: _FocusReticle()),
+        // Focus feedback is rendered at the actual tap point by
+        // _TapFocusLayer. A permanent centre reticle is misleading after the
+        // camera moves or the operator reframes.
+        child: const SizedBox.expand(),
       ),
     );
   }

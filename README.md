@@ -12,6 +12,41 @@ Device-specific Flutter cinema-camera application for Xiaomi Redmi Note 13 Pro+ 
 
 The package and personal-test certificate are unchanged, so this APK can update v0.1/v0.2/v0.3.0. It is release-optimized but signed with an Android debug certificate; replace that certificate before production distribution.
 
+### Latest `main` branch updates — UI, reliability, and workflow
+
+The current `main` branch includes changes after the archived v0.14 release notes below. Build from source to receive these updates.
+
+#### Liquid Glass camera UI
+
+- Shared frosted-glass material with backdrop blur, transparent neutral tint, luminous rim, highlight, and soft shadow.
+- Landscape top HUD, bottom dashboard cards, left tool rail, and right navigation/record rail use the same glass direction.
+- Portrait header and bottom Media / Record / Settings dock use matching inset rounded glass panels.
+- Portrait Focus / AE-AF / Zoom / MON controls are separated from the header.
+- Settings uses matching glass cards in portrait and landscape.
+
+#### Layout and navigation
+
+- Landscape direct camera tools remain on the **left**: Focus, AE/AF, Zoom, MON.
+- Landscape navigation/record controls remain on the **right**: Camera, Record, Media, Settings, More.
+- Settings has a visible back-to-camera action within its heading instead of a floating button that overlaps content.
+- Portrait Settings uses flexible card space rather than a fixed minimum-height panel, reducing clipping risk on shorter displays.
+- Portrait manual parameter strip has a visible scrollbar to indicate that additional controls can be reached horizontally.
+- Landscape right-rail spacing is capped so tall screens do not create excessive blank space between Camera, Record, and Media.
+
+#### Camera interaction and reliability
+
+- Recording timecode updates through a dedicated notifier, avoiding a complete camera-screen rebuild every 33 ms during recording.
+- A 256 MiB storage reserve prevents starting a recording when there is not enough room for safe recorder finalization.
+- The controller estimates remaining recording time from free storage and selected bitrate.
+- Camera preferences persist between launches: recording mode, bitrate, stabilization, zoom speed, sharpness, noise reduction, guide ratio, monitor tools, control lock, and haptic preference.
+- Tap focus feedback now appears at the actual tap point, transitions through scanning/success/failure states, and dismisses after a short delay unless AE/AF is locked. Old continuous-AF results cannot restore a stale marker after reframing.
+
+#### Feature-status clarity
+
+- Audio settings state that the current recorder uses the fixed device microphone source.
+- Live Stream and LUT pages are labelled as planned/GPU-pipeline work rather than being presented as active features.
+- Histogram, waveform, zebra, false colour, and focus-peaking controls remain UI/overlay demonstrations until the planned Camera2 analysis pipeline is implemented.
+
 ### v0.14 zoom pacing and exposure milestone
 
 Zoom requests now advance from lower-latency capture-start timing, submit at most once per frame and suppress duplicate ratios. Medium/Fast are 2.25×/3.5× Slow, portrait telemetry is moved to the bottom panel, and manual ISO extends to 3200 with digital-gain labeling above 800.
@@ -159,7 +194,7 @@ No Redmi phone was attached to the build workspace. Real preview orientation, Ca
 ## Build locally
 
 ```bash
-cd zircon_ui_flutter
+# Run from the repository root after cloning/downloading it.
 flutter pub get
 flutter analyze
 flutter test

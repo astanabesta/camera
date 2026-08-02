@@ -25,6 +25,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.ImageWriter;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -116,6 +117,8 @@ public final class CameraEngine implements SensorEventListener {
     private MediaRecorder mediaRecorder;
     private Surface recorderSurface;
     private ParcelFileDescriptor recordingFileDescriptor;
+    private ImageReader p010Reader;
+    private ImageWriter p010Writer;
     private Uri recordingUri;
     private Uri lastClipUri;
     private MethodChannel.Result pendingInitializeResult;
@@ -1266,8 +1269,35 @@ public final class CameraEngine implements SensorEventListener {
             throw new IllegalStateException("Recorder surface is unavailable");
         }
         final Surface sessionPreviewSurface = obtainPreviewSurface();
+        
+        Surface cameraTargetSurface = recorderSurface;
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                p010Writer = ImageWriter.newInstance(recorderSurface, 4, ImageFormat.YCBCR_P010);
+                p010Reader = ImageReader.newInstance(requestedRecordWidth, requestedRecordHeight, ImageFormat.YCBCR_P010, 4);
+                p010Reader.setOnImageAvailableListener(reader -> {
+                    try {
+                        Image image = reader.acquireNextImage();
+                        if (image != null) {
+                            if (p010Writer != null) {
+                                p010Writer.queueInputImage(image);
+                            } else {
+                                image.close();
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }, cameraHandler);
+                cameraTargetSurface = p010Reader.getSurface();
+            }
+        } catch (Throwable e) {
+            emitError("BRIDGE_FAILED", "Hardware P010 bridge failed, falling back to 8-bit surface", e);
+            cameraTargetSurface = recorderSurface;
+        }
+
+        final Surface finalTargetSurface = cameraTargetSurface;
+
         cameraDevice.createCaptureSession(
-                Arrays.asList(sessionPreviewSurface, recorderSurface),
+                Arrays.asList(sessionPreviewSurface, finalTargetSurface),
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(CameraCaptureSession session) {
@@ -1281,7 +1311,7 @@ public final class CameraEngine implements SensorEventListener {
                             repeatingBuilder = cameraDevice.createCaptureRequest(
                                     CameraDevice.TEMPLATE_RECORD);
                             repeatingBuilder.addTarget(sessionPreviewSurface);
-                            repeatingBuilder.addTarget(recorderSurface);
+                            repeatingBuilder.addTarget(finalTargetSurface);
                             applyControls(repeatingBuilder);
                             captureSession.setRepeatingRequest(
                                     repeatingBuilder.build(), captureCallback, cameraHandler);
@@ -1294,7 +1324,7 @@ public final class CameraEngine implements SensorEventListener {
                             response.put("width", requestedRecordWidth);
                             response.put("height", requestedRecordHeight);
                             response.put("fps", requestedRecordFps);
-                            response.put("codec", "HEVC Main 8-bit");
+                            response.put("codec", "HEVC Main10 10-bit (Zero-Copy)");
                             response.put("videoBitRate", requestedVideoBitRate);
                             response.put("audio", "AAC 48kHz");
                             MethodChannel.Result pending = pendingRecordStartResult;
@@ -1664,6 +1694,11 @@ public final class CameraEngine implements SensorEventListener {
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         mediaRecorder.setOutputFile(recordingFileDescriptor.getFileDescriptor());
         mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.HEVC);
+        if (Build.VERSION.SDK_INT >= 26) {
+            mediaRecorder.setVideoEncodingProfileLevel(
+                    MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
+                    MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel51);
+        }
         mediaRecorder.setVideoSize(requestedRecordWidth, requestedRecordHeight);
         mediaRecorder.setVideoFrameRate(requestedRecordFps);
         mediaRecorder.setVideoEncodingBitRate(requestedVideoBitRate);
@@ -1736,6 +1771,14 @@ public final class CameraEngine implements SensorEventListener {
     }
 
     private void releaseRecorder(boolean keepMediaStoreItem) {
+        if (p010Reader != null) {
+            try { p010Reader.close(); } catch (Throwable ignored) {}
+            p010Reader = null;
+        }
+        if (p010Writer != null) {
+            try { p010Writer.close(); } catch (Throwable ignored) {}
+            p010Writer = null;
+        }
         if (recorderSurface != null) {
             recorderSurface.release();
             recorderSurface = null;

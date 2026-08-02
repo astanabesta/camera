@@ -11,6 +11,12 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.5.4
 
+# shared_preferences_android 2.4.23 requires a newer Kotlin Gradle API than
+# this deliberately Java-only Camera2 project uses. Pin the compatible Android
+# implementation until the Android/Kotlin toolchain is upgraded together.
+dependency_overrides:
+  shared_preferences_android: 2.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

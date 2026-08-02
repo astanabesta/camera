@@ -1686,16 +1686,16 @@ public final class CameraEngine implements SensorEventListener {
         // Format: [in_0, out_0, in_1, out_1, ..., in_N, out_N] on a 0.0 to 1.0 scale.
         // Aggressively flat pseudo-log curve to maximize dynamic range
         float[] curve = new float[] {
-            0.0000f, 0.1200f, // Strongly lift blacks
-            0.0500f, 0.2200f, // Very bright shadows
-            0.1000f, 0.3000f, 
-            0.2000f, 0.4200f, // Mid-gray sits higher
-            0.3000f, 0.5000f, 
-            0.4000f, 0.5800f,
-            0.5000f, 0.6400f,
-            0.6000f, 0.7000f, // Extreme highlight compression starts early
-            0.8000f, 0.8000f,
-            1.0000f, 0.8500f  // Clip peak white heavily
+            0.0000f, 0.0000f, // MUST anchor at 0.0 to prevent black level corruption
+            0.0200f, 0.1000f, // Quickly lift the deepest shadows
+            0.0500f, 0.2000f, // Lift shadows
+            0.1000f, 0.3200f, 
+            0.2000f, 0.4800f, // Mid-gray sits much higher
+            0.3000f, 0.5800f, 
+            0.4000f, 0.6600f,
+            0.6000f, 0.8000f, // Long, smooth shoulder for highlight roll-off
+            0.8000f, 0.9200f,
+            1.0000f, 1.0000f  // MUST anchor at 1.0 to prevent highlight solarization/artifacts
         };
         return new TonemapCurve(curve, curve, curve);
     }

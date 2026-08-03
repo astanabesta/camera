@@ -1740,12 +1740,9 @@ public final class CameraEngine implements SensorEventListener {
                 
         if (requestedHlgProfile && Build.VERSION.SDK_INT >= 33) {
             // HLG handles its own tonemapping via the DynamicRangeProfile
-        } else if ("S-Log3".equals(requestedLogCurve)) {
+        } else if ("Zircon".equals(requestedLogCurve)) {
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
-            builder.set(CaptureRequest.TONEMAP_CURVE, createSLog3Curve());
-        } else if ("Xiaomi".equals(requestedLogCurve)) {
-            builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
-            builder.set(CaptureRequest.TONEMAP_CURVE, createXiaomiLogCurve());
+            builder.set(CaptureRequest.TONEMAP_CURVE, createZirconLogCurve());
         } else {
             builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE);
             switch (requestedFilmStyle) {
@@ -2252,46 +2249,26 @@ public final class CameraEngine implements SensorEventListener {
 
 
 
-    private TonemapCurve createSLog3Curve() {
-        // Safe S-Log3 mapping
-        // We MUST smooth out the top end of the curve. The extreme jump from 0.64 to 1.0 
-        // in the previous version caused the ISP's cubic spline to break, leading to extreme 
-        // cyan/magenta glitching in the clipped white areas.
-        float[] curve = new float[] {
-            0.0000f, 0.0350f, // Black level
-            0.0200f, 0.1200f, // Deep shadows
-            0.0500f, 0.2200f, // Shadows
-            0.1800f, 0.4100f, // 18% Middle Gray EXACTLY at 41% IRE
-            0.3000f, 0.4600f, 
-            0.5000f, 0.5200f, 
-            0.7000f, 0.5700f,
-            0.8000f, 0.6100f, // White
-            0.9000f, 0.7500f, // Smooth transition
-            1.0000f, 1.0000f  // Safe anchor
-        };
-        return new TonemapCurve(curve, curve, curve);
-    }
-
-    private TonemapCurve createXiaomiLogCurve() {
-        // Xiaomi's official 10-bit Log (V-Log/Mi-Log) emulation based on standard smartphone sensor characteristics.
-        // It's a mathematically precise 1D curve designed to stretch dynamic range exactly how Xiaomi's native cinema mode does:
-        // 1. Heavy shadow lift starting instantly at 0.0 (anchor at 0.005) to expose the deep noise floor.
-        // 2. A very long, linear mid-section (gamma shift) to pull down midtones, preventing skin from blowing out.
-        // 3. Extreme compression on the top 15% of the curve to preserve sky/highlight details seamlessly.
-        
+        private TonemapCurve createZirconLogCurve() {
+        // Zircon Log: A mathematically pure, continuous logarithmic function
+        // Formula: y = log10(x * 10 + 1) / log10(11)
+        // This guarantees absolutely zero spline overshoot, perfect (0,0) to (1,1) anchoring,
+        // and flawless inversion in post-production via the ZIRCON_LOG_TO_REC709.cube LUT.
         float[] curve = new float[] {
             0.0000f, 0.0000f,
-            0.0200f, 0.1200f,
-            0.0500f, 0.2200f,
-            0.1000f, 0.3200f,
-            0.2000f, 0.4400f,
-            0.3000f, 0.5200f,
-            0.4000f, 0.5900f,
-            0.5000f, 0.6500f,
-            0.6000f, 0.7000f,
-            0.7000f, 0.7500f,
-            0.8000f, 0.8000f,
-            0.9000f, 0.8600f,
+            0.0200f, 0.0760f,
+            0.0500f, 0.1691f,
+            0.1000f, 0.2891f,
+            0.1800f, 0.4294f,
+            0.3000f, 0.5781f,
+            0.4000f, 0.6712f,
+            0.5000f, 0.7472f,
+            0.6000f, 0.8115f,
+            0.7000f, 0.8672f,
+            0.8000f, 0.9163f,
+            0.9000f, 0.9603f,
+            0.9500f, 0.9806f,
+            0.9800f, 0.9923f,
             1.0000f, 1.0000f
         };
         return new TonemapCurve(curve, curve, curve);

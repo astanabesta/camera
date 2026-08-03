@@ -56,8 +56,7 @@ enum RecordingMode {
 
 enum LogCurve {
   rec709('Rec.709'),
-  xiaomi('Xiaomi'),
-  slog3('S-Log3');
+  zircon('Zircon Log');
 
   const LogCurve(this.label);
   final String label;
@@ -65,8 +64,7 @@ enum LogCurve {
   String get camera2Value {
     switch (this) {
       case LogCurve.rec709: return 'Rec709';
-      case LogCurve.xiaomi: return 'Xiaomi';
-      case LogCurve.slog3: return 'S-Log3';
+      case LogCurve.zircon: return 'Zircon';
     }
   }
 }

@@ -77,6 +77,47 @@ import io.flutter.view.TextureRegistry;
  */
 public final class CameraEngine implements SensorEventListener {
     private volatile boolean requestP010Dump = false;
+
+    private volatile boolean requestTonemapDump = false;
+    
+    private void dumpHardwareCurve(TotalCaptureResult result) {
+        try {
+            TonemapCurve curve = result.get(CaptureResult.TONEMAP_CURVE);
+            Integer mode = result.get(CaptureResult.TONEMAP_MODE);
+            
+            String filename = "ZIRCON_CURVE_" + System.currentTimeMillis() + ".txt";
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            
+            Uri uri = activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri != null) {
+                try (java.io.OutputStream out = activity.getContentResolver().openOutputStream(uri)) {
+                    out.write(("TONEMAP_MODE: " + mode + "\n").getBytes());
+                    if (curve != null) {
+                        out.write(("Red Curve: " + curve.getPointCount(TonemapCurve.CHANNEL_RED) + " points\n").getBytes());
+                        for (int i = 0; i < curve.getPointCount(TonemapCurve.CHANNEL_RED); i++) {
+                            out.write((curve.getPoint(TonemapCurve.CHANNEL_RED, i).toString() + "\n").getBytes());
+                        }
+                        out.write(("Green Curve: " + curve.getPointCount(TonemapCurve.CHANNEL_GREEN) + " points\n").getBytes());
+                        for (int i = 0; i < curve.getPointCount(TonemapCurve.CHANNEL_GREEN); i++) {
+                            out.write((curve.getPoint(TonemapCurve.CHANNEL_GREEN, i).toString() + "\n").getBytes());
+                        }
+                        out.write(("Blue Curve: " + curve.getPointCount(TonemapCurve.CHANNEL_BLUE) + " points\n").getBytes());
+                        for (int i = 0; i < curve.getPointCount(TonemapCurve.CHANNEL_BLUE); i++) {
+                            out.write((curve.getPoint(TonemapCurve.CHANNEL_BLUE, i).toString() + "\n").getBytes());
+                        }
+                    } else {
+                        out.write("TONEMAP_CURVE is NULL (ISP overriding or hidden)\n".getBytes());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public interface EventEmitter {
         void emit(Map<String, Object> event);
     }
@@ -1012,6 +1053,7 @@ public final class CameraEngine implements SensorEventListener {
     
     public void dumpP010Frame(MethodChannel.Result result) {
         requestP010Dump = true;
+        requestTonemapDump = true;
         replySuccess(result, "P010 raw dump armed for next frame");
     }
 
@@ -1519,10 +1561,17 @@ public final class CameraEngine implements SensorEventListener {
                     putNumber(event, "oisMode",
                             result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE));
                     
-                    putNumber(event, "tonemapMode", result.get(CaptureResult.TONEMAP_MODE));
+                    Integer tonemapMode = result.get(CaptureResult.TONEMAP_MODE);
+                    putNumber(event, "tonemapMode", tonemapMode);
                     putNumber(event, "colorCorrectionMode", result.get(CaptureResult.COLOR_CORRECTION_MODE));
                     putNumber(event, "shadingMode", result.get(CaptureResult.SHADING_MODE));
                     putNumber(event, "controlMode", result.get(CaptureResult.CONTROL_MODE));
+                    
+                    // IF a dump was just completed, let's also dump the exact hardware curve that generated it
+                    if (requestTonemapDump) {
+                        requestTonemapDump = false;
+                        dumpHardwareCurve(result);
+                    }
 
                     putNumber(event, "videoStabilizationMode",
                             result.get(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE));

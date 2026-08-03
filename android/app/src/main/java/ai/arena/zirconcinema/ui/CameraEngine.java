@@ -2322,26 +2322,27 @@ public final class CameraEngine implements SensorEventListener {
 
 
 
-        private TonemapCurve createZirconLogCurve() {
-        // Zircon Log: A mathematically pure, continuous logarithmic function
-        // Formula: y = log10(x * 10 + 1) / log10(11)
-        // This guarantees absolutely zero spline overshoot, perfect (0,0) to (1,1) anchoring,
-        // and flawless inversion in post-production via the ZIRCON_LOG_TO_REC709.cube LUT.
+            private TonemapCurve createZirconLogCurve() {
+        // Zircon Log V2: Expanded Dynamic Range
+        // Formula: y = log10(x * 40 + 1) / log10(41)
+        // This is a much flatter curve. It lifts the shadows far higher out of the noise floor
+        // and compresses the highlights much softer, allocating exactly 50% of the 10-bit data 
+        // below 18% gray, and 50% to the highlights above it. 
         float[] curve = new float[] {
             0.0000f, 0.0000f,
-            0.0200f, 0.0760f,
-            0.0500f, 0.1691f,
-            0.1000f, 0.2891f,
-            0.1800f, 0.4294f,
-            0.3000f, 0.5781f,
-            0.4000f, 0.6712f,
-            0.5000f, 0.7472f,
-            0.6000f, 0.8115f,
-            0.7000f, 0.8672f,
-            0.8000f, 0.9163f,
-            0.9000f, 0.9603f,
-            0.9500f, 0.9806f,
-            0.9800f, 0.9923f,
+            0.0200f, 0.1583f,
+            0.0500f, 0.2958f,
+            0.1000f, 0.4334f,
+            0.1800f, 0.5666f,
+            0.3000f, 0.6907f,
+            0.4000f, 0.7629f,
+            0.5000f, 0.8198f,
+            0.6000f, 0.8668f,
+            0.7000f, 0.9068f,
+            0.8000f, 0.9415f,
+            0.9000f, 0.9724f,
+            0.9500f, 0.9865f,
+            0.9800f, 0.9947f,
             1.0000f, 1.0000f
         };
         return new TonemapCurve(curve, curve, curve);

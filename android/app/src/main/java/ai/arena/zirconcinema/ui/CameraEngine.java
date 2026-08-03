@@ -2253,7 +2253,10 @@ public final class CameraEngine implements SensorEventListener {
 
 
     private TonemapCurve createSLog3Curve() {
-        // Reverted to the original accepted S-Log3 response
+        // Safe S-Log3 mapping
+        // We MUST smooth out the top end of the curve. The extreme jump from 0.64 to 1.0 
+        // in the previous version caused the ISP's cubic spline to break, leading to extreme 
+        // cyan/magenta glitching in the clipped white areas.
         float[] curve = new float[] {
             0.0000f, 0.0350f, // Black level
             0.0200f, 0.1200f, // Deep shadows
@@ -2262,9 +2265,9 @@ public final class CameraEngine implements SensorEventListener {
             0.3000f, 0.4600f, 
             0.5000f, 0.5200f, 
             0.7000f, 0.5700f,
-            0.9000f, 0.6100f, // 90% White EXACTLY at 61% IRE
-            0.9900f, 0.6400f, // Maintain the flat 64% IRE log curve as long as possible
-            1.0000f, 1.0000f  // Hard clip anchor at absolute 1.0 to prevent 10-bit integer overflow/artifacts in clipped whites
+            0.8000f, 0.6100f, // White
+            0.9000f, 0.7500f, // Smooth transition
+            1.0000f, 1.0000f  // Safe anchor
         };
         return new TonemapCurve(curve, curve, curve);
     }

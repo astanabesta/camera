@@ -1826,20 +1826,31 @@ public final class CameraEngine implements SensorEventListener {
     
     private void dumpRawP010ToDisk(Image image) {
         try {
-            java.io.File dir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-            java.io.File file = new java.io.File(dir, "ZIRCON_RAW_" + image.getWidth() + "x" + image.getHeight() + "_" + System.currentTimeMillis() + ".yuv");
-            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+            String filename = "ZIRCON_RAW_" + image.getWidth() + "x" + image.getHeight() + "_" + System.currentTimeMillis() + ".yuv";
+            
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            
+            Uri uri = activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new IOException("Failed to create MediaStore entry for raw dump.");
+            
+            try (java.io.OutputStream out = activity.getContentResolver().openOutputStream(uri)) {
                 ByteBuffer y = image.getPlanes()[0].getBuffer();
                 ByteBuffer uv = image.getPlanes()[1].getBuffer();
                 y.position(0); uv.position(0);
+                
                 byte[] yBytes = new byte[y.remaining()];
                 y.get(yBytes);
-                fos.write(yBytes);
+                out.write(yBytes);
+                
                 byte[] uvBytes = new byte[uv.remaining()];
                 uv.get(uvBytes);
-                fos.write(uvBytes);
+                out.write(uvBytes);
             }
-            emitState("p010_dump_complete", file.getAbsolutePath());
+            
+            emitState("p010_dump_complete", "Dumped successfully to Downloads: " + filename);
         } catch (Exception e) {
             emitError("DUMP_FAILED", "Failed to dump raw P010 frame", e);
         }

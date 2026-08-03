@@ -128,6 +128,10 @@ class NativeCameraEngine {
     return _invokeMap('runTenBitDiagnosticRecording', null);
   }
 
+    Future<Map<Object?, Object?>> dumpP010Frame() {
+    return _invokeMap('dumpP010Frame', null);
+  }
+
   Future<Map<Object?, Object?>> startRecording() {
     return _invokeMap('startRecording', null);
   }

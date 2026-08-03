@@ -1008,6 +1008,12 @@ public final class CameraEngine implements SensorEventListener {
         });
     }
 
+    
+    public void dumpP010Frame(MethodChannel.Result result) {
+        requestP010Dump = true;
+        replySuccess(result, "P010 raw dump armed for next frame");
+    }
+
     public void startRecording(MethodChannel.Result result) {
         if (!initialized || cameraDevice == null) {
             replyError(result, "NOT_READY", "Camera is not ready", null);
@@ -1310,6 +1316,11 @@ public final class CameraEngine implements SensorEventListener {
                                 // This completely eliminates any Variable Frame Rate (VFR) jitter from the camera sensor
                                 long syntheticTimestampNs = baseTimeNs[0] + (frameCount[0] * 1_000_000_000L / requestedRecordFps);
                                 image.setTimestamp(syntheticTimestampNs);
+                                if (requestP010Dump) {
+                                    requestP010Dump = false;
+                                    dumpRawP010ToDisk(image);
+                                }
+
                                 p010Writer.queueInputImage(image);
                                 frameCount[0]++;
                             } else {
@@ -1484,6 +1495,12 @@ public final class CameraEngine implements SensorEventListener {
                             result.get(CaptureResult.NOISE_REDUCTION_MODE));
                     putNumber(event, "oisMode",
                             result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE));
+                    
+                    putNumber(event, "tonemapMode", result.get(CaptureResult.TONEMAP_MODE));
+                    putNumber(event, "colorCorrectionMode", result.get(CaptureResult.COLOR_CORRECTION_MODE));
+                    putNumber(event, "shadingMode", result.get(CaptureResult.SHADING_MODE));
+                    putNumber(event, "controlMode", result.get(CaptureResult.CONTROL_MODE));
+
                     putNumber(event, "videoStabilizationMode",
                             result.get(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE));
                     event.put("aeAfLocked", aeAfLocked);
@@ -1781,6 +1798,28 @@ public final class CameraEngine implements SensorEventListener {
             1.0000f, 1.0000f  // MUST anchor at 1.0 to prevent highlight solarization/artifacts
         };
         return new TonemapCurve(curve, curve, curve);
+    }
+
+    
+    private void dumpRawP010ToDisk(Image image) {
+        try {
+            java.io.File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            java.io.File file = new java.io.File(dir, "ZIRCON_RAW_" + image.getWidth() + "x" + image.getHeight() + "_" + System.currentTimeMillis() + ".yuv");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                ByteBuffer y = image.getPlanes()[0].getBuffer();
+                ByteBuffer uv = image.getPlanes()[1].getBuffer();
+                y.position(0); uv.position(0);
+                byte[] yBytes = new byte[y.remaining()];
+                y.get(yBytes);
+                fos.write(yBytes);
+                byte[] uvBytes = new byte[uv.remaining()];
+                uv.get(uvBytes);
+                fos.write(uvBytes);
+            }
+            emitState("p010_dump_complete", file.getAbsolutePath());
+        } catch (Exception e) {
+            emitError("DUMP_FAILED", "Failed to dump raw P010 frame", e);
+        }
     }
 
     private void prepareRecorder() throws IOException {

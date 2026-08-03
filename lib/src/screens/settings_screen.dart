@@ -469,6 +469,13 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     onChanged: c.setGuideRatio,
   ),
   const _ValueRow(title: 'Advanced', value: ''),
+  _CustomRow(
+    title: 'Developer Diagnostics',
+    trailing: FilledButton(
+      onPressed: c.diagBusy ? null : c.dumpP010Frame,
+      child: Text(c.diagBusy ? 'DUMPING' : 'DUMP RAW P010'),
+    ),
+  ),
 ];
 
 List<Widget> _cameraRows(CameraUiController c) => <Widget>[

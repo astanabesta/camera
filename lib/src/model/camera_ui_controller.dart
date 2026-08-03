@@ -1118,6 +1118,24 @@ class CameraUiController extends ChangeNotifier {
     notifyListeners();
   }
 
+  
+  bool _diagBusy = false;
+  bool get diagBusy => _diagBusy;
+
+  Future<void> dumpP010Frame() async {
+    if (_diagBusy || !cameraReady) return;
+    _diagBusy = true;
+    notifyListeners();
+    try {
+      await _nativeCamera.dumpP010Frame();
+    } catch (e) {
+      _cameraError = _friendlyPlatformError(e);
+    } finally {
+      _diagBusy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> runTenBitRec709Preflight() async {
     if (allowSimulation || !cameraReady || _tenBitPreflightBusy) return;
     _tenBitPreflightBusy = true;

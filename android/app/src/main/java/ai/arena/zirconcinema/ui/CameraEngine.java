@@ -2322,27 +2322,27 @@ public final class CameraEngine implements SensorEventListener {
 
 
 
-            private TonemapCurve createZirconLogCurve() {
-        // Zircon Log V2: Expanded Dynamic Range
-        // Formula: y = log10(x * 40 + 1) / log10(41)
-        // This is a much flatter curve. It lifts the shadows far higher out of the noise floor
-        // and compresses the highlights much softer, allocating exactly 50% of the 10-bit data 
-        // below 18% gray, and 50% to the highlights above it. 
+                private TonemapCurve createZirconLogCurve() {
+        // Zircon Log V3: Maximum Dynamic Range (Optimized for Limited Range TV encoding)
+        // Formula: y = log10(x * 100 + 1) / log10(101)
+        // This is an extremely aggressive logarithmic curve. 
+        // 18% middle gray is pushed all the way to 64% IRE, reserving the bottom 64% 
+        // of the 10-bit code values entirely for shadow retention and noise floor micro-details.
         float[] curve = new float[] {
             0.0000f, 0.0000f,
-            0.0200f, 0.1583f,
-            0.0500f, 0.2958f,
-            0.1000f, 0.4334f,
-            0.1800f, 0.5666f,
-            0.3000f, 0.6907f,
-            0.4000f, 0.7629f,
-            0.5000f, 0.8198f,
-            0.6000f, 0.8668f,
-            0.7000f, 0.9068f,
-            0.8000f, 0.9415f,
-            0.9000f, 0.9724f,
-            0.9500f, 0.9865f,
-            0.9800f, 0.9947f,
+            0.0100f, 0.1502f,
+            0.0300f, 0.3004f,
+            0.0500f, 0.3882f,
+            0.1000f, 0.5196f,
+            0.1800f, 0.6380f,
+            0.3000f, 0.7441f,
+            0.4000f, 0.8047f,
+            0.5000f, 0.8519f,
+            0.6000f, 0.8907f,
+            0.7000f, 0.9236f,
+            0.8000f, 0.9522f,
+            0.9000f, 0.9774f,
+            0.9500f, 0.9890f,
             1.0000f, 1.0000f
         };
         return new TonemapCurve(curve, curve, curve);

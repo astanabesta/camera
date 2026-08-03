@@ -76,6 +76,7 @@ import io.flutter.view.TextureRegistry;
  * explicit metadata, and bounded RAW buffers); no MotionCam source is copied.
  */
 public final class CameraEngine implements SensorEventListener {
+    private volatile boolean requestP010Dump = false;
     public interface EventEmitter {
         void emit(Map<String, Object> event);
     }

@@ -1309,19 +1309,20 @@ public final class CameraEngine implements SensorEventListener {
                     try {
                         Image image = reader.acquireNextImage();
                         if (image != null) {
+                            // 1. Process diagnostic dump FIRST, regardless of whether we are actively recording.
+                            if (requestP010Dump) {
+                                requestP010Dump = false;
+                                dumpRawP010ToDisk(image);
+                            }
+                            
+                            // 2. Process video encoding if recording is active
                             if (p010Writer != null && recording) {
                                 if (frameCount[0] == 0) {
                                     baseTimeNs[0] = System.nanoTime();
                                 }
                                 // Force absolutely perfect Constant Frame Rate (CFR)
-                                // This completely eliminates any Variable Frame Rate (VFR) jitter from the camera sensor
                                 long syntheticTimestampNs = baseTimeNs[0] + (frameCount[0] * 1_000_000_000L / requestedRecordFps);
                                 image.setTimestamp(syntheticTimestampNs);
-                                if (requestP010Dump) {
-                                    requestP010Dump = false;
-                                    dumpRawP010ToDisk(image);
-                                }
-
                                 p010Writer.queueInputImage(image);
                                 frameCount[0]++;
                             } else {

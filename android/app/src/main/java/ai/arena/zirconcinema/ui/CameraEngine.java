@@ -1248,11 +1248,31 @@ public final class CameraEngine implements SensorEventListener {
     private void createPreviewSession() {
         if (cameraDevice == null) return;
         closeSession();
+        
         final Surface sessionPreviewSurface;
         try {
             sessionPreviewSurface = obtainPreviewSurface();
+            
+            // To allow the Diagnostic Dumper to work BEFORE recording starts, we must initialize the P010 reader here as well.
+            if (p010Reader != null) {
+                try { p010Reader.close(); } catch (Throwable ignored) {}
+            }
+            p010Reader = ImageReader.newInstance(requestedRecordWidth, requestedRecordHeight, ImageFormat.YCBCR_P010, 2);
+            p010Reader.setOnImageAvailableListener(reader -> {
+                try {
+                    Image image = reader.acquireNextImage();
+                    if (image != null) {
+                        if (requestP010Dump) {
+                            requestP010Dump = false;
+                            dumpRawP010ToDisk(image);
+                        }
+                        image.close();
+                    }
+                } catch (Throwable ignored) {}
+            }, cameraHandler);
+            
             cameraDevice.createCaptureSession(
-                    List.of(sessionPreviewSurface),
+                    Arrays.asList(sessionPreviewSurface, p010Reader.getSurface()),
                     new CameraCaptureSession.StateCallback() {
                         @Override
                         public void onConfigured(CameraCaptureSession session) {
@@ -1265,6 +1285,7 @@ public final class CameraEngine implements SensorEventListener {
                                 repeatingBuilder = cameraDevice.createCaptureRequest(
                                         CameraDevice.TEMPLATE_PREVIEW);
                                 repeatingBuilder.addTarget(sessionPreviewSurface);
+                                repeatingBuilder.addTarget(p010Reader.getSurface()); // Feed the diagnostic reader constantly
                                 applyControls(repeatingBuilder);
                                 captureSession.setRepeatingRequest(
                                         repeatingBuilder.build(), captureCallback, cameraHandler);
@@ -1805,7 +1826,7 @@ public final class CameraEngine implements SensorEventListener {
     
     private void dumpRawP010ToDisk(Image image) {
         try {
-            java.io.File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            java.io.File dir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
             java.io.File file = new java.io.File(dir, "ZIRCON_RAW_" + image.getWidth() + "x" + image.getHeight() + "_" + System.currentTimeMillis() + ".yuv");
             try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
                 ByteBuffer y = image.getPlanes()[0].getBuffer();

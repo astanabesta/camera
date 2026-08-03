@@ -1762,7 +1762,7 @@ public final class CameraEngine implements SensorEventListener {
                     builder.set(CaptureRequest.TONEMAP_CURVE, createVividCurve());
                     break;
                 default:
-                    builder.set(CaptureRequest.TONEMAP_CURVE, createSafeRec709Curve());
+                    builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
                     break;
             }
         }

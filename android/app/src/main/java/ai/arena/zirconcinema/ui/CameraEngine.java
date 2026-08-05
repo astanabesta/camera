@@ -1364,7 +1364,7 @@ public final class CameraEngine implements SensorEventListener {
             }
 
             @Override
-            public void onSurfaceCleanup() {
+            public void onSurfaceDestroyed() {
                 Handler handler = cameraHandler;
                 if (handler != null) {
                     handler.post(() -> {
@@ -2260,7 +2260,9 @@ public final class CameraEngine implements SensorEventListener {
         response.put("cameraId", CAMERA_ID);
         response.put("rotationDegrees", previewRotationDegrees());
         response.put("engine", "Camera2");
-        response.put("recorder", "MediaRecorder HEVC Main + AAC");
+        response.put("recorder", useManualRecording
+                ? "ManualRecordingEngine HEVC Main10 + AAC"
+                : "MediaRecorder HEVC Main10 + AAC");
         response.put("tintSupported", false);
         response.put("minimumZoomRatio", minimumZoomRatio);
         response.put("logProfileSupported", true);

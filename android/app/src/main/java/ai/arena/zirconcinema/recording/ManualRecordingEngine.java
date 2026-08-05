@@ -89,8 +89,12 @@ public class ManualRecordingEngine {
         videoEncoder = new VideoEncoderWrapper(width, height, frameRate, bitRate);
         cameraOutputSurface = videoEncoder.start();
         
-        // Initialize audio encoder
+        // Initialize audio encoder. The input thread holds its first read
+        // until the video track exists, which keeps the HAL buffer filling
+        // while the session spins up instead of encoding audio that would
+        // only be dropped before the muxer can take it.
         audioEncoder = new AudioEncoderWrapper(timestampManager);
+        audioEncoder.setStartGate(() -> muxer.getVideoTrackIndex() >= 0);
         audioEncoder.start();
         
         // Start drain threads
@@ -214,26 +218,33 @@ public class ManualRecordingEngine {
         int videoTrackIndex = -1;
         
         while (isRecording.get() || (videoEncoder != null && videoEncoder.isRunning())) {
-            // Check if video track needs to be added
+            // Check if video track needs to be added. Wait for the codec to
+            // post its parameter sets (csd-0) — the format available right
+            // after start() lacks them and MediaMuxer would reject the track.
             if (videoTrackIndex < 0 && videoEncoder != null) {
                 MediaFormat outputFormat = videoEncoder.getOutputFormat();
-                if (outputFormat != null) {
+                if (outputFormat != null && outputFormat.containsKey("csd-0")) {
                     videoTrackIndex = muxer.addVideoTrack(outputFormat);
                     Log.i(TAG, "Video track added to muxer at index " + videoTrackIndex);
-                    
-                    // Start muxer now that video track is added
-                    try {
-                        muxer.start();
-                        Log.i(TAG, "Muxer started after adding video track");
-                    } catch (IOException e) {
-                        Log.e(TAG, "Failed to start muxer: " + e.getMessage());
-                        break;
-                    }
                 }
             }
             
-            // Drain encoder output
-            if (videoEncoder != null && videoTrackIndex >= 0) {
+            // Keep asking the muxer to start. It only starts once the audio
+            // track is also present (or the audio wait deadline expired), so
+            // MediaMuxer never sees addTrack() after start().
+            if (videoTrackIndex >= 0 && !muxer.isReady()) {
+                try {
+                    muxer.maybeStart();
+                } catch (IOException e) {
+                    Log.e(TAG, "Failed to start muxer: " + e.getMessage());
+                    break;
+                }
+            }
+            
+            // Drain encoder output. Until the muxer is running, leave the
+            // encoded frames inside MediaCodec — dropping the leading IDR
+            // frame would corrupt the start of the clip.
+            if (videoEncoder != null && videoTrackIndex >= 0 && muxer.isReady()) {
                 boolean running = videoEncoder.drainOutput(muxer, videoTrackIndex, timestampManager);
                 if (!running) {
                     break;
@@ -261,17 +272,25 @@ public class ManualRecordingEngine {
         int audioTrackIndex = -1;
         
         while (isRecording.get()) {
-            // Check if audio track needs to be added
+            // Check if audio track needs to be added. AAC needs the esds
+            // blob (csd-0); without it MediaMuxer would reject the track.
             if (audioTrackIndex < 0 && audioEncoder != null) {
                 MediaFormat outputFormat = audioEncoder.getOutputFormat();
-                if (outputFormat != null) {
+                if (outputFormat != null && outputFormat.containsKey("csd-0")) {
                     audioTrackIndex = muxer.addAudioTrack(outputFormat);
                     Log.i(TAG, "Audio track added to muxer at index " + audioTrackIndex);
+                    try {
+                        muxer.maybeStart();
+                    } catch (IOException e) {
+                        Log.e(TAG, "Failed to start muxer: " + e.getMessage());
+                        break;
+                    }
                 }
             }
             
-            // Drain encoder output
-            if (audioEncoder != null && audioTrackIndex >= 0) {
+            // Drain encoder output once the muxer can accept samples. Before
+            // that, the encoded chunks stay buffered inside MediaCodec.
+            if (audioEncoder != null && audioTrackIndex >= 0 && muxer.isReady()) {
                 boolean running = audioEncoder.drainOutput(muxer, audioTrackIndex);
                 if (!running) {
                     break;

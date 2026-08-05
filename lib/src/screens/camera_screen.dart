@@ -1446,7 +1446,8 @@ class _Project extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(
-          '${controller.resolution} • ${controller.profile} • ${controller.recordBitDepth.label.toUpperCase()} • ${controller.colorRange.label.toUpperCase()}',
+          '${controller.resolution} • ${controller.profile} • ${controller.recordBitDepth.label.toUpperCase()} • ${controller.colorRange.label.toUpperCase()}'
+          '${controller.recordingEngine == RecordingEngine.manual ? ' • ${controller.recordingEngine.hudLabel}' : ''}',
           style: const TextStyle(color: ZirconColors.textMuted, fontSize: 6.5),
         ),
       ],

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Manual recording engine compile fixes and Recording Engine toggle
+
+- Fixed the Phase 1 compile blocker in `AudioEncoderWrapper.java`: replaced the non-existent `AudioRecord.TIMEBLOCK_LAST` API with `android.media.AudioTimestamp` + `AudioRecord.getTimestamp(timestamp, AudioTimestamp.TIMEBASE_BOOTTIME)` (API 24+; app minSdk is 36). Audio chunk PTS is now interpolated from a hardware-clock anchor (`nanoTime`/`framePosition`) instead of "now", removing buffer-depth jitter from the AAC track.
+- Fixed a second compile regression in `CameraEngine.java`: renamed the `SurfaceProducer.Callback` override `onSurfaceCleanup()` to the real Flutter 3.27+ API `onSurfaceDestroyed()`; the repo had been reverted to a name that does not exist in any Flutter embedding release.
+- Hardened the manual pipeline first-start sequence so a flipped-on manual engine produces playable clips: `MediaMuxer` now starts only after both tracks exist (`MuxerController.maybeStart()` with a 1500 ms audio-track deadline for video-only fallback) because `addTrack()` after `start()` crashes; track adds wait for codec `csd-0`; drain loops hold encoded output inside MediaCodec until the muxer runs (protects the leading IDR frame); the audio input thread gates its first read on the video track via `AudioRecord`'s enlarged (4×) HAL buffer.
+- Video PTS is now rebased to zero-based clip time in `VideoEncoderWrapper.drainOutput()` (first encoded frame = PTS 0) so MP4s no longer inherit absolute boot-time clock readings as their start offset.
+- Added a user-facing Recording Engine toggle (Settings → Record): MediaRecorder (default, stable fallback) or Manual Engine (Beta). Wired end-to-end: `RecordingEngine` enum + persistence in `CameraUiController`, `NativeCameraEngine.setRecordingEngine()` method channel call, `MainActivity` routing, and a native `RECORDING_ACTIVE` refusal guard while recording. The HUD shows a "MANUAL ENGINE" badge when armed, and the selection is re-applied after camera init so it survives restarts.
+- Verified the full Java tree compiles: javac 17 against an API 36 `android.jar` plus minimal Flutter-embedding stubs — 0 errors.
+
 ## 0.15.2+17 — Real glass UI, HUD layout fixes and focus stability
 
 - Added a real frosted-glass dashboard: each `_glassBox` now renders a `BackdropFilter` with a 12px gaussian blur over the live preview and a translucent `Colors.white` 8% tint.

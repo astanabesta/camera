@@ -421,10 +421,21 @@ class _PageBody extends StatelessWidget {
 
 List<Widget> _recordRows(CameraUiController c) => <Widget>[
   const _ValueRow(title: 'Codec', value: 'HEVC (H.265)'),
-  _SwitchRow(
-    title: 'Manual Recording Engine',
-    value: c.useManualRecording,
-    onChanged: c.setUseManualRecording,
+  _ChoiceRow<RecordingEngine>(
+    title: 'Recording Engine',
+    value: c.recordingEngine,
+    values: RecordingEngine.values,
+    label: (RecordingEngine value) => value.label,
+    onChanged: c.setRecordingEngine,
+  ),
+  _ValueRow(
+    title: 'Engine Note',
+    value: switch (c.recordingEngine) {
+      RecordingEngine.mediaRecorder => 'Stable Camera2 pipeline — default',
+      RecordingEngine.manual =>
+        'Phase 1 MediaCodec pipeline — experimental',
+    },
+    chevron: false,
   ),
   _ChoiceRow<RecordingMode>(
     title: 'Resolution',
@@ -457,13 +468,6 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     values: ColorRange.values,
     label: (ColorRange value) => value.label,
     onChanged: c.setColorRange,
-  ),
-  _ChoiceRow<RecordingEngine>(
-    title: 'Recording Engine',
-    value: c.recordingEngine,
-    values: RecordingEngine.values,
-    label: (RecordingEngine value) => value.label,
-    onChanged: c.setRecordingEngine,
   ),
   _ChoiceRow<FilmStyle>(
     title: 'Color Profile',

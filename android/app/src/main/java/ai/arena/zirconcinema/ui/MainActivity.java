@@ -68,14 +68,12 @@ public final class MainActivity extends FlutterActivity {
             case "tapToFocus" -> cameraEngine.tapToFocus(argumentsMap(call), result);
             case "setAeAfLock" -> cameraEngine.setAeAfLock(
                     call.argument("locked") == Boolean.TRUE, result);
-            case "setUseManualRecording" -> cameraEngine.setUseManualRecording(
-                    call.argument("enabled") == Boolean.TRUE, result);
             case "runTenBitRec709Preflight" -> cameraEngine.runTenBitRec709Preflight(result);
             case "runTenBitRec709SessionTest" -> cameraEngine.runTenBitRec709SessionTest(result);
             case "runTenBitDiagnosticRecording" -> cameraEngine.runTenBitDiagnosticRecording(result);
             case "dumpP010Frame" -> cameraEngine.dumpP010Frame(result);
             case "setUseManualRecording" -> cameraEngine.setUseManualRecording(
-                    call.argument("useManual") == Boolean.TRUE, result);
+                    call.argument("enabled") == Boolean.TRUE, result);
             case "startRecording" -> cameraEngine.startRecording(result);
             case "stopRecording" -> cameraEngine.stopRecording(result);
             case "pause" -> {

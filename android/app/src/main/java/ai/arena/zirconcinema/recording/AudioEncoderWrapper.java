@@ -7,13 +7,14 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaRecorder;
-import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 /**
  * Wraps AudioRecord + MediaCodec for AAC audio encoding.
@@ -32,6 +33,14 @@ public class AudioEncoderWrapper {
     private MediaCodec audioEncoder;
     private MediaCodec.BufferInfo outputBufferInfo;
     
+    /**
+     * Optional gate that delays the first audio read until the video track
+     * has been added to the muxer, so the initial AAC chunks are not encoded
+     * only to be dropped while the container cannot take samples yet.
+     */
+    private BooleanSupplier startGate;
+    private static final long START_GATE_TIMEOUT_MS = 2000;
+    
     private Thread audioInputThread;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final AtomicInteger samplesCaptured = new AtomicInteger(0);
@@ -42,6 +51,16 @@ public class AudioEncoderWrapper {
     public AudioEncoderWrapper(TimestampManager timestampManager) {
         this.timestampManager = timestampManager;
         Log.i(TAG, "Audio encoder wrapper created");
+    }
+    
+    /**
+     * Set a gate that is polled before the first AudioRecord read.
+     * While the gate returns false the input thread waits (the HAL buffer
+     * keeps filling), so early audio is not encoded only to be dropped
+     * because the muxer has no tracks yet.
+     */
+    public void setStartGate(BooleanSupplier gate) {
+        this.startGate = gate;
     }
     
     /**
@@ -60,24 +79,15 @@ public class AudioEncoderWrapper {
             throw new IOException("Invalid audio buffer size");
         }
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            audioRecord = new AudioRecord.Builder()
-                    .setAudioSource(MediaRecorder.AudioSource.MIC)
-                    .setAudioFormat(new AudioFormat.Builder()
-                            .setSampleRate(SAMPLE_RATE)
-                            .setChannelMask(CHANNEL_CONFIG)
-                            .setEncoding(AUDIO_FORMAT)
-                            .build())
-                    .setBufferSizeInBytes(bufferSize * 2) // Extra buffering
-                    .build();
-        } else {
-            audioRecord = new AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    SAMPLE_RATE,
-                    CHANNEL_CONFIG,
-                    AUDIO_FORMAT,
-                    bufferSize * 2);
-        }
+        audioRecord = new AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.MIC)
+                .setAudioFormat(new AudioFormat.Builder()
+                        .setSampleRate(SAMPLE_RATE)
+                        .setChannelMask(CHANNEL_CONFIG)
+                        .setEncoding(AUDIO_FORMAT)
+                        .build())
+                .setBufferSizeInBytes(bufferSize * 4) // Extra headroom for the start gate
+                .build();
         
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             throw new IOException("AudioRecord initialization failed");
@@ -117,28 +127,66 @@ public class AudioEncoderWrapper {
     private void audioInputLoop() {
         Log.i(TAG, "Audio input thread started");
         
+        // Wait for the muxer before the first read so that the encoded lead-in
+        // audio is actually written instead of dropped by the muxer guard.
+        if (startGate != null) {
+            long gateStart = SystemClock.uptimeMillis();
+            while (isRunning.get() && !startGate.getAsBoolean()) {
+                if (SystemClock.uptimeMillis() - gateStart > START_GATE_TIMEOUT_MS) {
+                    Log.w(TAG, "Start gate timed out after " + START_GATE_TIMEOUT_MS +
+                          " ms; capturing without muxer ready");
+                    break;
+                }
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+        
         // AAC frame is 1024 samples per channel
-        int frameSize = 1024 * 2 * 2; // 1024 samples * 2 channels * 2 bytes per sample (PCM16)
+        int frameSize = 1024 * 2 * 2; // 1024 frames * 2 channels * 2 bytes per sample (PCM16)
         byte[] audioBuffer = new byte[frameSize];
+        
+        // Hardware-clock anchor. AudioTimestamp.nanoTime is the CLOCK_BOOTTIME
+        // instant at which frame framePosition was captured — the same clock
+        // domain as the camera sensor timestamps, so the two tracks can be
+        // aligned by the TimestampManager.
+        final AudioTimestamp anchor = new AudioTimestamp();
+        long anchorNanoTime = -1;
+        long anchorFramePosition = -1;
         
         while (isRunning.get()) {
             int bytesRead = audioRecord.read(audioBuffer, 0, frameSize);
             
             if (bytesRead > 0) {
-                // Get audio timestamp
-                long timestampUs = -1;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    AudioTimestamp timestamp = new AudioTimestamp();
-                    int result = audioRecord.getTimestamp(
-                            timestamp, AudioTimestamp.TIMEBASE_BOOTTIME);
-                    if (result == AudioRecord.SUCCESS) {
-                        timestampUs = timestamp.nanoTime / 1000; // ns → µs
-                    }
+                int framesRead = bytesRead / 4; // 4 bytes per PCM16 stereo frame
+                long chunkStartFrame = samplesCaptured.get();
+                
+                // Refresh the hardware-clock anchor against the just-read
+                // position. AudioRecord.getTimestamp() reports when the frame
+                // at framePosition entered the stream.
+                int status = audioRecord.getTimestamp(anchor, AudioTimestamp.TIMEBASE_BOOTTIME);
+                if (status == AudioRecord.SUCCESS) {
+                    anchorNanoTime = anchor.nanoTime;
+                    anchorFramePosition = anchor.framePosition;
                 }
                 
-                if (timestampUs < 0) {
-                    // Fallback: estimate from sample count
-                    timestampUs = (samplesCaptured.get() * 1000000L) / SAMPLE_RATE;
+                long timestampUs;
+                if (anchorNanoTime > 0) {
+                    // Interpolate the capture instant of this chunk's FIRST
+                    // frame from the anchor. Stamping the whole chunk with
+                    // "now" would skew every chunk by the variable buffer
+                    // depth inside AudioRecord.
+                    long chunkStartNs = anchorNanoTime
+                            + ((chunkStartFrame - anchorFramePosition) * 1_000_000_000L) / SAMPLE_RATE;
+                    timestampUs = chunkStartNs / 1000; // ns → µs
+                } else {
+                    // Fallback: no usable hardware anchor yet, estimate from
+                    // the running frame count (drifts, but strictly monotonic).
+                    timestampUs = (chunkStartFrame * 1_000_000L) / SAMPLE_RATE;
                 }
                 
                 // Register with timestamp manager
@@ -147,7 +195,7 @@ public class AudioEncoderWrapper {
                 // Feed to encoder
                 feedEncoder(audioBuffer, bytesRead, ptsUs);
                 
-                samplesCaptured.addAndGet(bytesRead / 4); // 4 bytes per stereo sample
+                samplesCaptured.addAndGet(framesRead);
                 
                 int sampleCount = samplesCaptured.get();
                 if (sampleCount <= 48000 || sampleCount % 480000 == 0) { // Log first second and every 10 seconds

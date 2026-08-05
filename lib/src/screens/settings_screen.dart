@@ -421,6 +421,11 @@ class _PageBody extends StatelessWidget {
 
 List<Widget> _recordRows(CameraUiController c) => <Widget>[
   const _ValueRow(title: 'Codec', value: 'HEVC (H.265)'),
+  _SwitchRow(
+    title: 'Manual Recording Engine',
+    value: c.useManualRecording,
+    onChanged: c.setUseManualRecording,
+  ),
   _ChoiceRow<RecordingMode>(
     title: 'Resolution',
     value: c.recordingMode,

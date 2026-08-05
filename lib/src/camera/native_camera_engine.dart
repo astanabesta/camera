@@ -138,6 +138,12 @@ class NativeCameraEngine {
     return _invokeMap('dumpP010Frame', null);
   }
 
+  Future<Map<Object?, Object?>> setUseManualRecording(bool useManual) {
+    return _invokeMap('setUseManualRecording', <String, Object>{
+      'useManual': useManual,
+    });
+  }
+
   Future<Map<Object?, Object?>> startRecording() {
     return _invokeMap('startRecording', null);
   }

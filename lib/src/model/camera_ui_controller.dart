@@ -319,6 +319,7 @@ class CameraUiController extends ChangeNotifier {
   BitratePreset _bitratePreset = BitratePreset.high;
   StabilizationMode _stabilizationMode = StabilizationMode.optical;
   ZoomSpeed _zoomSpeed = ZoomSpeed.slow;
+  bool _useManualRecording = false;
   int? _actualEdgeMode;
   int? _actualNoiseReductionMode;
   int? _actualOisMode;
@@ -433,6 +434,7 @@ class CameraUiController extends ChangeNotifier {
   BitratePreset get bitratePreset => _bitratePreset;
   StabilizationMode get stabilizationMode => _stabilizationMode;
   ZoomSpeed get zoomSpeed => _zoomSpeed;
+  bool get useManualRecording => _useManualRecording;
   int? get actualEdgeMode => _actualEdgeMode;
   int? get actualNoiseReductionMode => _actualNoiseReductionMode;
   int? get actualOisMode => _actualOisMode;
@@ -572,6 +574,7 @@ class CameraUiController extends ChangeNotifier {
       _sharpnessMode = SharpnessMode.values[values['sharpness'] as int? ?? _sharpnessMode.index];
       _noiseReductionMode = NoiseReductionMode.values[values['noiseReduction'] as int? ?? _noiseReductionMode.index];
       _guideRatio = GuideRatio.values[values['guideRatio'] as int? ?? _guideRatio.index];
+      _useManualRecording = values['useManualRecording'] as bool? ?? _useManualRecording;
       _lockControlsWhileRecording = values['lockControls'] as bool? ?? _lockControlsWhileRecording;
       _hapticControlFeedback = values['haptics'] as bool? ?? _hapticControlFeedback;
       final List<dynamic>? tools = values['tools'] as List<dynamic>?;
@@ -606,6 +609,7 @@ class CameraUiController extends ChangeNotifier {
         'sharpness': _sharpnessMode.index,
         'noiseReduction': _noiseReductionMode.index,
         'guideRatio': _guideRatio.index,
+        'useManualRecording': _useManualRecording,
         'lockControls': _lockControlsWhileRecording,
         'haptics': _hapticControlFeedback,
         'tools': _enabledTools.map((MonitorTool value) => value.name).toList(),
@@ -845,6 +849,21 @@ class CameraUiController extends ChangeNotifier {
     notifyListeners();
     unawaited(_savePreferences());
     _scheduleNativeControlApply();
+  }
+
+  Future<void> setUseManualRecording(bool value) async {
+    if (_recording || _useManualRecording == value) return;
+    _useManualRecording = value;
+    notifyListeners();
+    unawaited(_savePreferences());
+    if (!allowSimulation) {
+      try {
+        await _nativeCamera.setUseManualRecording(value);
+      } catch (error) {
+        _cameraError = _friendlyPlatformError(error);
+        notifyListeners();
+      }
+    }
   }
 
   void setSettingsPage(SettingsPage value) {

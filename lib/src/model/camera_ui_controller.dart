@@ -121,6 +121,17 @@ enum ColorRange {
   final int camera2Value;
 }
 
+/// Selects the recording implementation. The manual engine is experimental
+/// and keeps MediaRecorder available as a reliable fallback.
+enum RecordingEngine {
+  mediaRecorder('MediaRecorder (Stable)', false),
+  manualPipeline('Manual Pipeline (Experimental)', true);
+
+  const RecordingEngine(this.label, this.useManualRecording);
+  final String label;
+  final bool useManualRecording;
+}
+
 enum BitratePreset {
   low('Low', 20000000),
   medium('Medium', 50000000),
@@ -300,6 +311,7 @@ class CameraUiController extends ChangeNotifier {
   RecordingMode _recordingMode = RecordingMode.uhd30;
   RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
   ColorRange _colorRange = ColorRange.limited;
+  RecordingEngine _recordingEngine = RecordingEngine.mediaRecorder;
   LogCurve _logCurve = LogCurve.rec709;
   FilmStyle _filmStyle = FilmStyle.standard;
   double _shadowLift = 0.0;
@@ -413,6 +425,7 @@ class CameraUiController extends ChangeNotifier {
   RecordingMode get recordingMode => _recordingMode;
   RecordBitDepth get recordBitDepth => _recordBitDepth;
   ColorRange get colorRange => _colorRange;
+  RecordingEngine get recordingEngine => _recordingEngine;
   LogCurve get logCurve => _logCurve;
   FilmStyle get filmStyle => _filmStyle;
   double get shadowLift => _shadowLift;
@@ -550,6 +563,7 @@ class CameraUiController extends ChangeNotifier {
       _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
       _recordBitDepth = RecordBitDepth.values[values['recordBitDepth'] as int? ?? _recordBitDepth.index];
       _colorRange = ColorRange.values[values['colorRange'] as int? ?? _colorRange.index];
+      _recordingEngine = RecordingEngine.values[values['recordingEngine'] as int? ?? _recordingEngine.index];
       _logCurve = LogCurve.values[values['logCurve'] as int? ?? _logCurve.index];
       _filmStyle = FilmStyle.values[values['filmStyle'] as int? ?? _filmStyle.index];
       _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
@@ -585,6 +599,7 @@ class CameraUiController extends ChangeNotifier {
         'recordingMode': _recordingMode.index,
         'recordBitDepth': _recordBitDepth.index,
         'colorRange': _colorRange.index,
+        'recordingEngine': _recordingEngine.index,
         'bitrate': _bitratePreset.index,
         'stabilization': _stabilizationMode.index,
         'zoomSpeed': _zoomSpeed.index,
@@ -620,6 +635,7 @@ class CameraUiController extends ChangeNotifier {
       _cameraError = null;
       await _nativeCamera.setVolumeZoomEnabled(_section == AppSection.camera);
       await _applyNativeControls();
+      await _setNativeRecordingEngine(_recordingEngine);
     } catch (error) {
       _runtimeState = CameraRuntimeState.error;
       _cameraError = _friendlyPlatformError(error);
@@ -778,6 +794,25 @@ class CameraUiController extends ChangeNotifier {
     notifyListeners();
     unawaited(_savePreferences());
     _scheduleNativeControlApply();
+  }
+
+  void setRecordingEngine(RecordingEngine value) {
+    if (_recording || _recordingEngine == value) return;
+    _recordingEngine = value;
+    notifyListeners();
+    unawaited(_savePreferences());
+    if (cameraReady) {
+      unawaited(_setNativeRecordingEngine(value));
+    }
+  }
+
+  Future<void> _setNativeRecordingEngine(RecordingEngine value) async {
+    try {
+      await _nativeCamera.setUseManualRecording(value.useManualRecording);
+    } catch (error) {
+      _cameraError = _friendlyPlatformError(error);
+      notifyListeners();
+    }
   }
 
   void setBitratePreset(BitratePreset value) {

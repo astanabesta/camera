@@ -116,6 +116,12 @@ class NativeCameraEngine {
     return _invokeMap('setAeAfLock', <String, Object>{'locked': locked});
   }
 
+  Future<Map<Object?, Object?>> setUseManualRecording(bool enabled) {
+    return _invokeMap('setUseManualRecording', <String, Object>{
+      'enabled': enabled,
+    });
+  }
+
   Future<Map<Object?, Object?>> runTenBitRec709Preflight() {
     return _invokeMap('runTenBitRec709Preflight', null);
   }

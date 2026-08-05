@@ -2,6 +2,7 @@ package ai.arena.zirconcinema.recording;
 
 import android.media.AudioFormat;
 import android.media.AudioRecord;
+import android.media.AudioTimestamp;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
@@ -120,8 +121,6 @@ public class AudioEncoderWrapper {
         int frameSize = 1024 * 2 * 2; // 1024 samples * 2 channels * 2 bytes per sample (PCM16)
         byte[] audioBuffer = new byte[frameSize];
         
-        long[] audioTimestamp = new long[1];
-        
         while (isRunning.get()) {
             int bytesRead = audioRecord.read(audioBuffer, 0, frameSize);
             
@@ -129,10 +128,11 @@ public class AudioEncoderWrapper {
                 // Get audio timestamp
                 long timestampUs = -1;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    long[] timestampNs = new long[1];
-                    int result = audioRecord.getTimestamp(timestampNs, AudioRecord.TIMEBLOCK_LAST);
+                    AudioTimestamp timestamp = new AudioTimestamp();
+                    int result = audioRecord.getTimestamp(
+                            timestamp, AudioTimestamp.TIMEBASE_BOOTTIME);
                     if (result == AudioRecord.SUCCESS) {
-                        timestampUs = timestampNs[0] / 1000; // ns → µs
+                        timestampUs = timestamp.nanoTime / 1000; // ns → µs
                     }
                 }
                 

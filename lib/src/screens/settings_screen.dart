@@ -453,6 +453,13 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     label: (ColorRange value) => value.label,
     onChanged: c.setColorRange,
   ),
+  _ChoiceRow<RecordingEngine>(
+    title: 'Recording Engine',
+    value: c.recordingEngine,
+    values: RecordingEngine.values,
+    label: (RecordingEngine value) => value.label,
+    onChanged: c.setRecordingEngine,
+  ),
   _ChoiceRow<FilmStyle>(
     title: 'Color Profile',
     value: c.filmStyle,

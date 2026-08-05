@@ -1068,11 +1068,22 @@ public final class CameraEngine implements SensorEventListener {
      * This allows testing the new manual pipeline while keeping the working MediaRecorder as fallback.
      */
     public void setUseManualRecording(boolean useManual, MethodChannel.Result result) {
-        useManualRecording = useManual;
-        Map<String, Object> response = new HashMap<>();
-        response.put("useManualRecording", useManualRecording);
-        response.put("mode", useManual ? "ManualRecordingEngine" : "MediaRecorder");
-        replySuccess(result, response);
+        if (cameraHandler == null) {
+            replyError(result, "NOT_READY", "Camera is not initialized", null);
+            return;
+        }
+        cameraHandler.post(() -> {
+            if (recording || pendingRecordStartResult != null) {
+                replyError(result, "RECORDING_ACTIVE",
+                        "Choose a recording engine before starting a recording", null);
+                return;
+            }
+            useManualRecording = useManual;
+            Map<String, Object> response = new HashMap<>();
+            response.put("useManualRecording", useManualRecording);
+            response.put("mode", useManual ? "ManualRecordingEngine" : "MediaRecorder");
+            replySuccess(result, response);
+        });
     }
 
     

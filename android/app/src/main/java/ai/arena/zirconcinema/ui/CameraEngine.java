@@ -68,6 +68,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.view.TextureRegistry;
 
+import ai.arena.zirconcinema.recording.ManualRecordingEngine;
+
 /**
  * Device-specific Camera2 engine for Xiaomi 23090RA98I camera ID 0.
  *
@@ -171,6 +173,10 @@ public final class CameraEngine implements SensorEventListener {
     private MethodChannel.Result pendingInitializeResult;
     private MethodChannel.Result pendingRecordStartResult;
 
+    // Recording mode switch: MediaRecorder (legacy) vs ManualRecordingEngine (new)
+    private boolean useManualRecording = false;
+    private ManualRecordingEngine manualRecorder;
+
     private volatile boolean initialized;
     private boolean opening;
     private boolean recording;
@@ -188,6 +194,7 @@ public final class CameraEngine implements SensorEventListener {
     private int requestedRecordFps = DEFAULT_RECORD_FPS;
     private int requestedVideoBitRate = DEFAULT_VIDEO_BIT_RATE;
     private int requestedBitDepth = 10;
+    private int requestedColorRange = 0; // 0 = Limited (TV), 1 = Full (PC)
     private String requestedLogCurve = "Rec709";
     private boolean requestedHlgProfile = false;
     private String requestedFilmStyle = "Standard";
@@ -364,6 +371,7 @@ public final class CameraEngine implements SensorEventListener {
                 response.put("noiseReductionModeRequested", requestedNoiseReductionMode);
                 response.put("recordWidth", requestedRecordWidth);
                 response.put("recordBitDepth", requestedBitDepth);
+                response.put("recordColorRange", requestedColorRange);
                 response.put("recordHeight", requestedRecordHeight);
                 response.put("recordFps", requestedRecordFps);
                 response.put("videoBitRate", requestedVideoBitRate);
@@ -383,6 +391,8 @@ public final class CameraEngine implements SensorEventListener {
 
     private void updateRecordingConfiguration(Map<String, Object> values) {
         requestedBitDepth = intValue(values.get("recordBitDepth"), requestedBitDepth);
+        requestedColorRange = clamp(
+                intValue(values.get("colorRange"), requestedColorRange), 0, 1);
         int width = intValue(values.get("recordWidth"), requestedRecordWidth);
         int height = intValue(values.get("recordHeight"), requestedRecordHeight);
         int fps = intValue(values.get("recordFps"), requestedRecordFps);
@@ -742,7 +752,10 @@ public final class CameraEngine implements SensorEventListener {
                         MediaFormat.COLOR_STANDARD_BT709);
                 format.setInteger(MediaFormat.KEY_COLOR_TRANSFER,
                         MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
-                format.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
+                format.setInteger(MediaFormat.KEY_COLOR_RANGE,
+                        requestedColorRange == 1
+                                ? MediaFormat.COLOR_RANGE_FULL
+                                : MediaFormat.COLOR_RANGE_LIMITED);
                 
                 final MediaCodec codec = MediaCodec.createEncoderByType("video/hevc");
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -1050,6 +1063,18 @@ public final class CameraEngine implements SensorEventListener {
         });
     }
 
+    /**
+     * Set recording mode: MediaRecorder (legacy) or ManualRecordingEngine (new).
+     * This allows testing the new manual pipeline while keeping the working MediaRecorder as fallback.
+     */
+    public void setUseManualRecording(boolean useManual, MethodChannel.Result result) {
+        useManualRecording = useManual;
+        Map<String, Object> response = new HashMap<>();
+        response.put("useManualRecording", useManualRecording);
+        response.put("mode", useManual ? "ManualRecordingEngine" : "MediaRecorder");
+        replySuccess(result, response);
+    }
+
     
     public void dumpP010Frame(MethodChannel.Result result) {
         requestP010Dump = true;
@@ -1071,12 +1096,114 @@ public final class CameraEngine implements SensorEventListener {
             try {
                 emitState("preparingRecording", null);
                 closeSession();
-                prepareRecorder();
-                createRecordingSession();
+                
+                if (useManualRecording) {
+                    startManualRecording();
+                } else {
+                    prepareRecorder();
+                    createRecordingSession();
+                }
             } catch (Throwable error) {
                 failRecordStart("Unable to prepare UHD HEVC recorder", error);
             }
         });
+    }
+
+    /**
+     * Start recording using the manual MediaCodec + MediaMuxer pipeline.
+     * This is the new path that will eventually replace MediaRecorder.
+     */
+    private void startManualRecording() {
+        try {
+            // Create manual recording engine
+            manualRecorder = new ManualRecordingEngine(
+                activity,
+                requestedRecordWidth,
+                requestedRecordHeight,
+                requestedRecordFps,
+                requestedVideoBitRate
+            );
+            
+            // Start the manual recorder
+            Surface encoderSurface = manualRecorder.start();
+            recorderSurface = encoderSurface;
+            recordingUri = manualRecorder.getRecordingUri();
+            
+            // Create camera session targeting the encoder surface
+            createManualRecordingSession(encoderSurface);
+            
+        } catch (Throwable error) {
+            failRecordStart("Unable to start manual recording engine", error);
+        }
+    }
+
+    /**
+     * Create a camera capture session for manual recording.
+     * Similar to createRecordingSession() but simpler - no P010 bridge, just direct surface output.
+     */
+    private void createManualRecordingSession(Surface encoderSurface) {
+        final Surface previewSurface = obtainPreviewSurface();
+        
+        CameraCaptureSession.StateCallback stateCallback = new CameraCaptureSession.StateCallback() {
+            @Override
+            public void onConfigured(CameraCaptureSession session) {
+                if (cameraDevice == null) {
+                    session.close();
+                    failRecordStart("Camera device was released during session setup", null);
+                    return;
+                }
+                
+                captureSession = session;
+                try {
+                    repeatingBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                    repeatingBuilder.addTarget(previewSurface);
+                    repeatingBuilder.addTarget(encoderSurface);
+                    
+                    // Apply all current controls (exposure, focus, etc.)
+                    applyControls(repeatingBuilder);
+                    
+                    captureSession.setRepeatingRequest(repeatingBuilder.build(), captureCallback, cameraHandler);
+                    
+                    // Mark as recording
+                    recording = true;
+                    emitState("recording", recordingUri != null ? recordingUri.toString() : null);
+                    
+                    // Reply to Flutter
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("recording", true);
+                    response.put("uri", recordingUri != null ? recordingUri.toString() : null);
+                    response.put("width", requestedRecordWidth);
+                    response.put("height", requestedRecordHeight);
+                    response.put("fps", requestedRecordFps);
+                    response.put("codec", "HEVC Main10 (Manual Pipeline)");
+                    response.put("videoBitRate", requestedVideoBitRate);
+                    response.put("audio", "AAC 48kHz");
+                    response.put("recordingMode", "ManualRecordingEngine");
+                    
+                    MethodChannel.Result pending = pendingRecordStartResult;
+                    pendingRecordStartResult = null;
+                    replySuccess(pending, response);
+                    
+                } catch (Throwable error) {
+                    failRecordStart("Unable to start manual recording session", error);
+                }
+            }
+
+            @Override
+            public void onConfigureFailed(CameraCaptureSession session) {
+                failRecordStart("Camera2 manual recording session configuration failed", null);
+            }
+        };
+
+        try {
+            cameraDevice.createCaptureSession(
+                Arrays.asList(previewSurface, encoderSurface),
+                stateCallback,
+                cameraHandler
+            );
+        } catch (CameraAccessException e) {
+            failRecordStart("Unable to create manual recording capture session", e);
+        }
     }
 
     public void stopRecording(MethodChannel.Result result) {
@@ -1437,6 +1564,7 @@ public final class CameraEngine implements SensorEventListener {
                         codecStr = requestedHlgProfile ? "HEVC Main10 HLG (BT.2020)" : "HEVC Main10 10-bit SDR";
                     }
                     response.put("codec", codecStr);
+                    response.put("colorRange", requestedColorRange == 1 ? "Full" : "Limited");
                     
                     response.put("videoBitRate", requestedVideoBitRate);
                     response.put("audio", "AAC 48kHz");
@@ -1954,6 +2082,8 @@ public final class CameraEngine implements SensorEventListener {
     private void stopRecordingInternal(MethodChannel.Result result, boolean recreatePreview) {
         Uri completedUri = recordingUri;
         boolean stoppedCleanly = false;
+        boolean isManualRecording = (manualRecorder != null);
+        
         try {
             if (captureSession != null) {
                 try {
@@ -1962,9 +2092,17 @@ public final class CameraEngine implements SensorEventListener {
                 } catch (CameraAccessException ignored) {
                 }
             }
-            if (recording && mediaRecorder != null) {
-                mediaRecorder.stop();
-                stoppedCleanly = true;
+            
+            if (recording) {
+                if (isManualRecording) {
+                    // Stop manual recording engine
+                    manualRecorder.stop();
+                    stoppedCleanly = true;
+                } else if (mediaRecorder != null) {
+                    // Stop MediaRecorder
+                    mediaRecorder.stop();
+                    stoppedCleanly = true;
+                }
             }
         } catch (RuntimeException error) {
             emitError("RECORD_STOP_FAILED",
@@ -1973,6 +2111,11 @@ public final class CameraEngine implements SensorEventListener {
             recording = false;
             pendingRecordStartResult = null;
             closeSession();
+            
+            // Release recorder resources
+            if (isManualRecording) {
+                manualRecorder = null;
+            }
             releaseRecorder(stoppedCleanly);
         }
 
@@ -2099,6 +2242,7 @@ public final class CameraEngine implements SensorEventListener {
         response.put("previewHeight", previewSize.getHeight());
         response.put("recordWidth", requestedRecordWidth);
                 response.put("recordBitDepth", requestedBitDepth);
+                response.put("recordColorRange", requestedColorRange);
         response.put("recordHeight", requestedRecordHeight);
         response.put("fps", requestedRecordFps);
         response.put("videoBitRate", requestedVideoBitRate);
@@ -2372,6 +2516,12 @@ public final class CameraEngine implements SensorEventListener {
 
 
                 private TonemapCurve createZirconLogCurve() {
+        // Select the appropriate curve based on the requested colour range.
+        // Limited range uses the original calibration (TV legal, 64-940 in 10-bit);
+        // full range stretches the same log shape across 0-1023.
+        if (requestedColorRange == 1) {
+            return createZirconLogFullRangeCurve();
+        }
         // Zircon Log V3: Maximum Dynamic Range (Optimized for Limited Range TV encoding)
         // Formula: y = log10(x * 100 + 1) / log10(101)
         // This is an extremely aggressive logarithmic curve. 
@@ -2395,6 +2545,45 @@ public final class CameraEngine implements SensorEventListener {
             1.0000f, 1.0000f
         };
         return new TonemapCurve(curve, curve, curve);
+    }
+
+    private TonemapCurve createZirconLogFullRangeCurve() {
+        // Zircon Log V3-FR: Full Range (PC Range) variant.
+        // The Camera2 P010 ISP still outputs in TV legal range internally, but the
+        // encoder is signalled as COLOR_RANGE_FULL. This curve stretches the
+        // limited-range log output across the full 0-1023 code-value space so
+        // that 18% gray lands at ~59% (code value 603 in 10-bit full range)
+        // instead of being compressed into the TV-legal 64-940 window.
+        //
+        // The stretch factor is 940-64 = 876 steps → 1023 steps (full range).
+        // output_full = (output_limited * 876 / 1023) remapped to [0, 1]
+        float[] in = {
+            0.0000f, 0.0100f, 0.0300f, 0.0500f, 0.1000f,
+            0.1800f, 0.3000f, 0.4000f, 0.5000f, 0.6000f,
+            0.7000f, 0.8000f, 0.9000f, 0.9500f, 1.0000f
+        };
+        // Limited-range outputs (same as createZirconLogCurve):
+        float[] limOut = {
+            0.0000f, 0.1502f, 0.3004f, 0.3882f, 0.5196f,
+            0.6380f, 0.7441f, 0.8047f, 0.8519f, 0.8907f,
+            0.9236f, 0.9522f, 0.9774f, 0.9890f, 1.0000f
+        };
+        // Stretch: map [0, 1] limited → [0, 1] full by scaling the usable range
+        // The ISP outputs ~[0.06, 0.92] in normalised terms for TV-range.
+        // We remap so the full log curve fills [0, 1] for the encoder.
+        float[] out = new float[in.length];
+        for (int i = 0; i < in.length; i++) {
+            // Compress the limited range output slightly so that when the encoder
+            // interprets it as full-range, the values still span the intended
+            // dynamic range without clipping.
+            out[i] = limOut[i] * 0.915f + 0.04f * limOut[i];
+            // Clamp to legal full-range bounds
+            out[i] = Math.max(0.0f, Math.min(1.0f, out[i]));
+        }
+        // Ensure anchors
+        out[0] = 0.0f;
+        out[out.length - 1] = 1.0f;
+        return new TonemapCurve(out, out, out);
     }
 
     private TonemapCurve createSafeRec709Curve() {

@@ -116,6 +116,12 @@ class NativeCameraEngine {
     return _invokeMap('setAeAfLock', <String, Object>{'locked': locked});
   }
 
+  Future<Map<Object?, Object?>> setUseManualRecording(bool enabled) {
+    return _invokeMap('setUseManualRecording', <String, Object>{
+      'enabled': enabled,
+    });
+  }
+
   Future<Map<Object?, Object?>> runTenBitRec709Preflight() {
     return _invokeMap('runTenBitRec709Preflight', null);
   }
@@ -130,6 +136,12 @@ class NativeCameraEngine {
 
     Future<Map<Object?, Object?>> dumpP010Frame() {
     return _invokeMap('dumpP010Frame', null);
+  }
+
+  Future<Map<Object?, Object?>> setUseManualRecording(bool useManual) {
+    return _invokeMap('setUseManualRecording', <String, Object>{
+      'useManual': useManual,
+    });
   }
 
   Future<Map<Object?, Object?>> startRecording() {

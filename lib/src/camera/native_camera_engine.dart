@@ -118,29 +118,7 @@ class NativeCameraEngine {
 
   Future<Map<Object?, Object?>> setUseManualRecording(bool enabled) {
     return _invokeMap('setUseManualRecording', <String, Object>{
-      'enabled': enabled,
-    });
-  }
-
-  Future<Map<Object?, Object?>> runTenBitRec709Preflight() {
-    return _invokeMap('runTenBitRec709Preflight', null);
-  }
-
-  Future<Map<Object?, Object?>> runTenBitRec709SessionTest() {
-    return _invokeMap('runTenBitRec709SessionTest', null);
-  }
-
-  Future<Map<Object?, Object?>> runTenBitDiagnosticRecording() {
-    return _invokeMap('runTenBitDiagnosticRecording', null);
-  }
-
-    Future<Map<Object?, Object?>> dumpP010Frame() {
-    return _invokeMap('dumpP010Frame', null);
-  }
-
-  Future<Map<Object?, Object?>> setUseManualRecording(bool useManual) {
-    return _invokeMap('setUseManualRecording', <String, Object>{
-      'useManual': useManual,
+      'useManual': enabled,
     });
   }
 

@@ -446,6 +446,13 @@ List<Widget> _recordRows(CameraUiController c) => <Widget>[
     label: (RecordBitDepth value) => value.label,
     onChanged: c.setRecordBitDepth,
   ),
+  _ChoiceRow<ColorRange>(
+    title: 'Color Range',
+    value: c.colorRange,
+    values: ColorRange.values,
+    label: (ColorRange value) => value.label,
+    onChanged: c.setColorRange,
+  ),
   _ChoiceRow<FilmStyle>(
     title: 'Color Profile',
     value: c.filmStyle,

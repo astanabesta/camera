@@ -99,6 +99,28 @@ enum RecordBitDepth {
   final int depth;
 }
 
+/// Encoder colour-range signalling.
+///
+/// * [limited] uses TV-range legal levels (64–940 in 10-bit, 16–235 in 8-bit).
+///   This matches the broadcast default and the Camera2 P010 ISP output, so the
+///   Zircon Log curves are calibrated against it.
+/// * [full] uses the entire 0–1023 code-value range. Useful when the encoded
+///   file will be graded in a PC-range pipeline (DaVinci, Resolve, Nuke) or
+///   muxed into a RAW-like intermediate.
+///
+/// NOTE: The normal MediaRecorder pipeline does not expose KEY_COLOR_RANGE
+/// publicly. Full-range signalling is honoured by the explicit-MediaCodec
+/// diagnostic encoder; the MediaRecorder path is best-effort and may still
+/// produce limited-range output depending on the SoC encoder.
+enum ColorRange {
+  limited('Limited (TV)', 0),
+  full('Full (PC)', 1);
+
+  const ColorRange(this.label, this.camera2Value);
+  final String label;
+  final int camera2Value;
+}
+
 enum BitratePreset {
   low('Low', 20000000),
   medium('Medium', 50000000),
@@ -277,6 +299,7 @@ class CameraUiController extends ChangeNotifier {
   NoiseReductionMode _noiseReductionMode = NoiseReductionMode.minimal;
   RecordingMode _recordingMode = RecordingMode.uhd30;
   RecordBitDepth _recordBitDepth = RecordBitDepth.tenBit;
+  ColorRange _colorRange = ColorRange.limited;
   LogCurve _logCurve = LogCurve.rec709;
   FilmStyle _filmStyle = FilmStyle.standard;
   double _shadowLift = 0.0;
@@ -389,6 +412,7 @@ class CameraUiController extends ChangeNotifier {
   NoiseReductionMode get noiseReductionMode => _noiseReductionMode;
   RecordingMode get recordingMode => _recordingMode;
   RecordBitDepth get recordBitDepth => _recordBitDepth;
+  ColorRange get colorRange => _colorRange;
   LogCurve get logCurve => _logCurve;
   FilmStyle get filmStyle => _filmStyle;
   double get shadowLift => _shadowLift;
@@ -525,6 +549,7 @@ class CameraUiController extends ChangeNotifier {
       final Map<String, dynamic> values = jsonDecode(raw) as Map<String, dynamic>;
       _recordingMode = RecordingMode.values[values['recordingMode'] as int? ?? _recordingMode.index];
       _recordBitDepth = RecordBitDepth.values[values['recordBitDepth'] as int? ?? _recordBitDepth.index];
+      _colorRange = ColorRange.values[values['colorRange'] as int? ?? _colorRange.index];
       _logCurve = LogCurve.values[values['logCurve'] as int? ?? _logCurve.index];
       _filmStyle = FilmStyle.values[values['filmStyle'] as int? ?? _filmStyle.index];
       _bitratePreset = BitratePreset.values[values['bitrate'] as int? ?? _bitratePreset.index];
@@ -559,6 +584,7 @@ class CameraUiController extends ChangeNotifier {
       await preferences.setString(_preferencesKey, jsonEncode(<String, Object>{
         'recordingMode': _recordingMode.index,
         'recordBitDepth': _recordBitDepth.index,
+        'colorRange': _colorRange.index,
         'bitrate': _bitratePreset.index,
         'stabilization': _stabilizationMode.index,
         'zoomSpeed': _zoomSpeed.index,
@@ -743,6 +769,14 @@ class CameraUiController extends ChangeNotifier {
     if (_recording || _recordBitDepth == value) return;
     _recordBitDepth = value;
     notifyListeners();
+    _scheduleNativeControlApply();
+  }
+
+  void setColorRange(ColorRange value) {
+    if (_recording || _colorRange == value) return;
+    _colorRange = value;
+    notifyListeners();
+    unawaited(_savePreferences());
     _scheduleNativeControlApply();
   }
 
@@ -1353,6 +1387,7 @@ class CameraUiController extends ChangeNotifier {
         'recordHeight': _recordingMode.height,
         'recordFps': _recordingMode.fps,
         'recordBitDepth': _recordBitDepth.depth,
+        'colorRange': _colorRange.camera2Value,
         'hlgProfile': _recordBitDepth == RecordBitDepth.hlg10,
         'logCurve': _logCurve.camera2Value,
         'filmStyle': _filmStyle.index,

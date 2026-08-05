@@ -117,6 +117,11 @@ public class VideoEncoderWrapper {
         if (outputIndex >= 0) {
             ByteBuffer outputBuffer = encoder.getOutputBuffer(outputIndex);
             
+            // Rebase the raw sensor-clock PTS (CLOCK_BOOTTIME domain) onto
+            // zero-based clip time before it reaches the muxer.
+            outputBufferInfo.presentationTimeUs =
+                    timestampManager.rebaseVideoPts(outputBufferInfo.presentationTimeUs);
+            
             if (outputBuffer != null && outputBufferInfo.size > 0) {
                 // Write to muxer
                 muxer.writeSampleData(trackIndex, outputBuffer, outputBufferInfo);

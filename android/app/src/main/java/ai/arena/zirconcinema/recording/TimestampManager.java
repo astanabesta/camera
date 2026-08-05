@@ -45,6 +45,40 @@ public class TimestampManager {
     }
     
     /**
+     * Rebase an encoder-produced video PTS onto zero-based clip time.
+     * 
+     * With a Surface-input encoder, output buffers carry the camera sensor
+     * timestamp (CLOCK_BOOTTIME domain) converted to µs — an absolute clock
+     * reading that would otherwise land hours into the file. The first
+     * encoded frame becomes PTS 0 so the MP4 starts at t=0.
+     * 
+     * @param encoderPtsUs Raw PTS from encoder BufferInfo in microseconds
+     * @return Zero-based presentation timestamp in microseconds
+     */
+    public synchronized long rebaseVideoPts(long encoderPtsUs) {
+        if (videoBaseTimestampUs < 0) {
+            videoBaseTimestampUs = encoderPtsUs;
+            Log.i(TAG, "Video base timestamp set (encoder pts): " + videoBaseTimestampUs + " µs");
+        }
+        
+        long ptsUs = encoderPtsUs - videoBaseTimestampUs;
+        videoFrameCount++;
+        
+        if (videoFrameCount <= 5 || videoFrameCount % 300 == 0) {
+            Log.d(TAG, "Video frame #" + videoFrameCount + " PTS: " + ptsUs + " µs");
+        }
+        
+        return ptsUs;
+    }
+    
+    /**
+     * Absolute video base timestamp (µs, camera clock), or -1 if not set.
+     */
+    public synchronized long getVideoBaseTimestampUs() {
+        return videoBaseTimestampUs;
+    }
+    
+    /**
      * Register an audio chunk timestamp.
      * 
      * @param audioTimestampUs AudioRecord timestamp in microseconds (CLOCK_MONOTONIC)

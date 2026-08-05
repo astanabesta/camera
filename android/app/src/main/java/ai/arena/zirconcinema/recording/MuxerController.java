@@ -4,6 +4,7 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.io.IOException;
@@ -20,39 +21,70 @@ import java.nio.ByteBuffer;
 public class MuxerController {
     private static final String TAG = "MuxerController";
     
+    /** How long to wait for the audio track before starting video-only. */
+    private static final long AUDIO_TRACK_WAIT_MS = 1500;
+    
     private MediaMuxer muxer;
     private int videoTrackIndex = -1;
     private int audioTrackIndex = -1;
     private boolean muxerStarted = false;
+    private boolean requireAudio;
+    private long audioTrackDeadlineMs = -1;
     
     public MuxerController(ParcelFileDescriptor fileDescriptor, boolean requireAudio) throws IOException {
         if (fileDescriptor == null) {
             throw new IllegalArgumentException("FileDescriptor cannot be null");
         }
+        this.requireAudio = requireAudio;
         muxer = new MediaMuxer(fileDescriptor.getFileDescriptor(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         Log.i(TAG, "Muxer initialized with FileDescriptor");
     }
     
     /**
-     * Initialize the muxer (starts writing to file).
+     * Start the muxer when all expected tracks have been added.
      * 
-     * @throws IOException if muxer start fails
+     * MediaMuxer rejects addTrack() after start(), so starting early and
+     * adding the audio track later would crash. This method is a no-op until
+     * the video track exists AND (the audio track exists OR the audio wait
+     * deadline expires). Call it after every addTrack and periodically from
+     * a drain loop so the deadline path can fire.
+     * 
+     * @throws IOException if the muxer fails to start
      */
-    public synchronized void start() throws IOException {
+    public synchronized void maybeStart() throws IOException {
         if (muxer == null) {
             throw new IllegalStateException("Muxer not initialized");
         }
         if (muxerStarted) {
-            throw new IllegalStateException("Muxer already started");
+            return;
+        }
+        if (videoTrackIndex < 0) {
+            return; // Video track is mandatory.
+        }
+        if (requireAudio && audioTrackIndex < 0) {
+            if (audioTrackDeadlineMs < 0) {
+                audioTrackDeadlineMs = SystemClock.uptimeMillis() + AUDIO_TRACK_WAIT_MS;
+            }
+            if (SystemClock.uptimeMillis() < audioTrackDeadlineMs) {
+                return; // Audio track is still expected; keep waiting.
+            }
+            Log.w(TAG, "Audio track not available within " + AUDIO_TRACK_WAIT_MS +
+                  " ms; starting muxer video-only");
+            requireAudio = false;
         }
         
-        // Start muxer immediately after video track is added
-        // Audio track can be added later if needed
-        if (videoTrackIndex >= 0) {
-            muxer.start();
-            muxerStarted = true;
-            Log.i(TAG, "Muxer started with video track");
-        }
+        muxer.start();
+        muxerStarted = true;
+        Log.i(TAG, "Muxer started (videoTrack=" + videoTrackIndex +
+              ", audioTrack=" + (audioTrackIndex >= 0 ? audioTrackIndex : "none") + ")");
+    }
+    
+    /**
+     * Check whether the audio track is still expected before start.
+     * Drain loops can use this to prioritize adding the audio track.
+     */
+    public synchronized boolean isAwaitingAudioTrack() {
+        return !muxerStarted && requireAudio && audioTrackIndex < 0;
     }
     
     /**
@@ -154,21 +186,21 @@ public class MuxerController {
     /**
      * Get video track index.
      */
-    public int getVideoTrackIndex() {
+    public synchronized int getVideoTrackIndex() {
         return videoTrackIndex;
     }
     
     /**
      * Get audio track index.
      */
-    public int getAudioTrackIndex() {
+    public synchronized int getAudioTrackIndex() {
         return audioTrackIndex;
     }
     
     /**
      * Check if muxer is ready to write samples.
      */
-    public boolean isReady() {
+    public synchronized boolean isReady() {
         return muxer != null && muxerStarted;
     }
     

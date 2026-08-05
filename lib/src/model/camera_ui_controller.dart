@@ -121,15 +121,20 @@ enum ColorRange {
   final int camera2Value;
 }
 
-/// Selects the recording implementation. The manual engine is experimental
-/// and keeps MediaRecorder available as a reliable fallback.
+/// Selects the recording pipeline used to produce clips.
+///
+/// * [mediaRecorder] is the proven Camera2 → MediaRecorder pipeline. It stays
+///   the default and the fallback while the manual engine is validated.
+/// * [manual] is the Phase 1 pipeline (Camera2 → MediaCodec + MediaMuxer) with
+///   explicit audio/video timestamp control. It is the foundation for Zircon
+///   Log processing, range mapping and metadata injection, but experimental.
 enum RecordingEngine {
-  mediaRecorder('MediaRecorder (Stable)', false),
-  manualPipeline('Manual Pipeline (Experimental)', true);
+  mediaRecorder('MediaRecorder', 'MEDIA RECORDER'),
+  manual('Manual Engine (Beta)', 'MANUAL ENGINE');
 
-  const RecordingEngine(this.label, this.useManualRecording);
+  const RecordingEngine(this.label, this.hudLabel);
   final String label;
-  final bool useManualRecording;
+  final String hudLabel;
 }
 
 enum BitratePreset {
@@ -319,7 +324,6 @@ class CameraUiController extends ChangeNotifier {
   BitratePreset _bitratePreset = BitratePreset.high;
   StabilizationMode _stabilizationMode = StabilizationMode.optical;
   ZoomSpeed _zoomSpeed = ZoomSpeed.slow;
-  bool _useManualRecording = false;
   int? _actualEdgeMode;
   int? _actualNoiseReductionMode;
   int? _actualOisMode;
@@ -434,7 +438,6 @@ class CameraUiController extends ChangeNotifier {
   BitratePreset get bitratePreset => _bitratePreset;
   StabilizationMode get stabilizationMode => _stabilizationMode;
   ZoomSpeed get zoomSpeed => _zoomSpeed;
-  bool get useManualRecording => _useManualRecording;
   int? get actualEdgeMode => _actualEdgeMode;
   int? get actualNoiseReductionMode => _actualNoiseReductionMode;
   int? get actualOisMode => _actualOisMode;
@@ -574,7 +577,6 @@ class CameraUiController extends ChangeNotifier {
       _sharpnessMode = SharpnessMode.values[values['sharpness'] as int? ?? _sharpnessMode.index];
       _noiseReductionMode = NoiseReductionMode.values[values['noiseReduction'] as int? ?? _noiseReductionMode.index];
       _guideRatio = GuideRatio.values[values['guideRatio'] as int? ?? _guideRatio.index];
-      _useManualRecording = values['useManualRecording'] as bool? ?? _useManualRecording;
       _lockControlsWhileRecording = values['lockControls'] as bool? ?? _lockControlsWhileRecording;
       _hapticControlFeedback = values['haptics'] as bool? ?? _hapticControlFeedback;
       final List<dynamic>? tools = values['tools'] as List<dynamic>?;
@@ -609,7 +611,6 @@ class CameraUiController extends ChangeNotifier {
         'sharpness': _sharpnessMode.index,
         'noiseReduction': _noiseReductionMode.index,
         'guideRatio': _guideRatio.index,
-        'useManualRecording': _useManualRecording,
         'lockControls': _lockControlsWhileRecording,
         'haptics': _hapticControlFeedback,
         'tools': _enabledTools.map((MonitorTool value) => value.name).toList(),
@@ -639,7 +640,17 @@ class CameraUiController extends ChangeNotifier {
       _cameraError = null;
       await _nativeCamera.setVolumeZoomEnabled(_section == AppSection.camera);
       await _applyNativeControls();
-      await _setNativeRecordingEngine(_recordingEngine);
+      // The native pipeline flag always starts on MediaRecorder; re-apply the
+      // persisted selection so a manual-engine preference survives restarts.
+      if (_recordingEngine == RecordingEngine.manual) {
+        try {
+          await _nativeCamera.setRecordingEngine(true);
+        } catch (_) {
+          // Fall back silently; the next toggle re-arms the manual engine.
+          _recordingEngine = RecordingEngine.mediaRecorder;
+          unawaited(_savePreferences());
+        }
+      }
     } catch (error) {
       _runtimeState = CameraRuntimeState.error;
       _cameraError = _friendlyPlatformError(error);
@@ -801,22 +812,24 @@ class CameraUiController extends ChangeNotifier {
   }
 
   void setRecordingEngine(RecordingEngine value) {
-    if (_recording || _recordingEngine == value) return;
+    if (_recording || _recordBusy || _recordingEngine == value) return;
+    final RecordingEngine previous = _recordingEngine;
     _recordingEngine = value;
     notifyListeners();
     unawaited(_savePreferences());
-    if (cameraReady) {
-      unawaited(_setNativeRecordingEngine(value));
-    }
-  }
-
-  Future<void> _setNativeRecordingEngine(RecordingEngine value) async {
-    try {
-      await _nativeCamera.setUseManualRecording(value.useManualRecording);
-    } catch (error) {
-      _cameraError = _friendlyPlatformError(error);
-      notifyListeners();
-    }
+    if (allowSimulation || _cameraInitialization == null) return;
+    unawaited(() async {
+      try {
+        await _nativeCamera.setRecordingEngine(value == RecordingEngine.manual);
+      } catch (error) {
+        // The native side refused the switch (e.g. a recording is active).
+        // Roll back so the UI never lies about which pipeline is armed.
+        _recordingEngine = previous;
+        _cameraError = _friendlyPlatformError(error);
+        unawaited(_savePreferences());
+        notifyListeners();
+      }
+    }());
   }
 
   void setBitratePreset(BitratePreset value) {
@@ -849,21 +862,6 @@ class CameraUiController extends ChangeNotifier {
     notifyListeners();
     unawaited(_savePreferences());
     _scheduleNativeControlApply();
-  }
-
-  Future<void> setUseManualRecording(bool value) async {
-    if (_recording || _useManualRecording == value) return;
-    _useManualRecording = value;
-    notifyListeners();
-    unawaited(_savePreferences());
-    if (!allowSimulation) {
-      try {
-        await _nativeCamera.setUseManualRecording(value);
-      } catch (error) {
-        _cameraError = _friendlyPlatformError(error);
-        notifyListeners();
-      }
-    }
   }
 
   void setSettingsPage(SettingsPage value) {

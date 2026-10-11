@@ -2,6 +2,19 @@
 
 A professional, hardware-accelerated 10-bit cinema camera application specifically optimized for the Xiaomi 23090RA98I (Zircon / Redmi Note 13 Pro+ 5G).
 
+## Screenshots
+
+Flutter UI renders of the current interface, in both the landscape rig layout and the portrait hand-held layout. Full-resolution files live in [`assets/ui-previews/`](assets/ui-previews).
+
+| | Landscape | Portrait |
+|:--|:--|:--|
+| **Camera** | <img src="assets/ui-previews/camera-landscape-now.png" width="620" alt="Camera screen, landscape: exposure HUD strip, timecode, focus/AE-AF/zoom/MON tool rail, cinema ruler and waveform, record rail"> | <img src="assets/ui-previews/camera-portrait-now.png" width="200" alt="Camera screen, portrait: parameter strip, live preview, vertical tool rail, bottom record deck"> |
+| **Settings** | <img src="assets/ui-previews/settings-landscape-now.png" width="620" alt="Record settings page, landscape: navigation column with the settings pages, resolution, frame rate and bitrate rows"> | <img src="assets/ui-previews/settings-portrait-now.png" width="280" alt="Record settings page, portrait: stacked navigation list above the record rows"> |
+
+[All screens contact sheet](assets/ui-previews/ALL-SCREENS.png)
+
+> The viewfinder in these renders shows `assets/mock_preview.jpg`, the synthetic preview plate used by the UI prototype. It is a simulated plate only and is not footage captured by the Xiaomi device — see [`assets/README.md`](assets/README.md).
+
 ## Version History & Added Features
 
 ### v1.0.0 - The 10-Bit Cinema Upgrade
